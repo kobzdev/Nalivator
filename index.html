@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Dispenser — Interactive Wiring</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@600;900&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body { background:#16213e; font-family:'JetBrains Mono',monospace; color:#e2e8f0; min-height:100vh; user-select:none; }
+
+  header {
+    background:linear-gradient(135deg,#0f0f23,#1a1a3e);
+    border-bottom:2px solid #2d3561;
+    padding:12px 20px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  header h1 { font-family:'Orbitron',sans-serif; font-size:1rem; color:#60a5fa; letter-spacing:3px; text-shadow:0 0 20px rgba(96,165,250,.5); }
+  .hint { font-size:.62rem; color:#475569; letter-spacing:1px; }
+  .badge { background:rgba(96,165,250,.1); border:1px solid rgba(96,165,250,.3); border-radius:20px; padding:4px 12px; font-size:.6rem; color:#93c5fd; letter-spacing:2px; }
+
+  .wrap { display:grid; grid-template-columns:1fr 230px; height:calc(100vh - 52px); }
+
+  .board { overflow:auto; background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px); background-size:24px 24px; background-color:#0f1729; padding:16px; position:relative; }
+
+  /* ── Wire interaction ── */
+  .wire { cursor:pointer; transition:opacity .15s; }
+  .wire path, .wire line, .wire polyline { pointer-events:stroke; stroke-linecap:round; stroke-linejoin:round; }
+  .wire:not(.active):not(.faded) { opacity:1; }
+  .wire.active path, .wire.active line { filter:drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor); stroke-width:4 !important; }
+  .wire.faded { opacity:.12; }
+
+  /* Pin node pulse on active */
+  .pin-node { cursor:pointer; transition:r .15s; }
+  .pin-node.active { animation:pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── Tooltip ── */
+  #tip {
+    position:fixed; pointer-events:none;
+    background:#0f1729; border:1px solid #334155;
+    border-radius:8px; padding:8px 12px;
+    font-size:.68rem; color:#e2e8f0; line-height:1.6;
+    box-shadow:0 8px 32px rgba(0,0,0,.6);
+    max-width:220px; z-index:999;
+    display:none;
+  }
+  #tip .tip-from { color:#94a3b8; font-size:.6rem; }
+  #tip .tip-to   { font-weight:600; }
+  #tip .tip-pin  { color:#60a5fa; font-size:.62rem; }
+
+  /* ── Sidebar ── */
+  .sidebar { background:#0a0d14; border-left:1px solid #1e2535; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:6px; }
+  .s-title { font-family:'Orbitron',sans-serif; font-size:.58rem; letter-spacing:2px; color:#60a5fa; border-bottom:1px solid #1e2535; padding-bottom:5px; margin-bottom:4px; }
+
+  .conn-row {
+    display:grid; grid-template-columns:10px 1fr auto;
+    align-items:center; gap:6px; padding:4px 5px;
+    border-radius:4px; cursor:pointer;
+    font-size:.6rem; border:1px solid transparent;
+    transition:background .1s, border-color .1s;
+  }
+  .conn-row:hover { background:rgba(255,255,255,.04); }
+  .conn-row.active { background:rgba(96,165,250,.08); border-color:rgba(96,165,250,.25); }
+  .conn-dot { width:9px; height:9px; border-radius:50%; }
+  .conn-from { color:#94a3b8; }
+  .conn-to   { color:#475569; font-size:.56rem; }
+
+  .s-gap { height:8px; border-top:1px solid #1e2535; margin-top:2px; }
+
+  .note { border-radius:6px; padding:9px; font-size:.58rem; line-height:1.8; margin-top:4px; }
+  .note.warn { background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.2); color:#fca5a5; }
+  .note.info { background:rgba(96,165,250,.05); border:1px solid rgba(96,165,250,.15); color:#93c5fd; }
+  .note b { display:block; margin-bottom:2px; }
+  .note.warn b { color:#ef4444; }
+  .note.info b { color:#60a5fa; }
+
+  svg { display:block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>INTERACTIVE WIRING DIAGRAM</h1>
+  <span class="hint">CLICK ANY WIRE OR PIN TO HIGHLIGHT</span>
+  <div class="badge">ARDUINO UNO + MINI L298N</div>
+</header>
+
+<div id="tip"></div>
+
+<div class="wrap">
+<div class="board">
+<svg id="svg" viewBox="0 0 1020 820" xmlns="http://www.w3.org/2000/svg" style="min-width:880px;width:100%;height:auto">
+<defs>
+  <filter id="glow"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  <filter id="shadow"><feDropShadow dx="1" dy="3" stdDeviation="5" flood-color="#000" flood-opacity=".6"/></filter>
+  <filter id="pcb-sh"><feDropShadow dx="2" dy="4" stdDeviation="7" flood-color="#000" flood-opacity=".7"/></filter>
+
+  <!-- Highlighted arrow markers (white/bright) -->
+  <marker id="ah-w" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0.5 L6,3.5 L0,6.5Z" fill="white"/></marker>
+
+  <!-- Normal markers per color -->
+  <marker id="am-red"    markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#ef4444"/></marker>
+  <marker id="am-gnd"    markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#78716c"/></marker>
+  <marker id="am-purple" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#a78bfa"/></marker>
+  <marker id="am-violet" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#c084fc"/></marker>
+  <marker id="am-orange" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#f97316"/></marker>
+  <marker id="am-amber"  markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#fb923c"/></marker>
+  <marker id="am-green"  markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#4ade80"/></marker>
+  <marker id="am-lime"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#22c55e"/></marker>
+  <marker id="am-mint"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#86efac"/></marker>
+  <marker id="am-yellow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#facc15"/></marker>
+  <marker id="am-sky"    markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#38bdf8"/></marker>
+  <marker id="am-blue"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#7dd3fc"/></marker>
+  <marker id="am-pink"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#f472b6"/></marker>
+  <marker id="am-teal"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#34d399"/></marker>
+  <marker id="am-cyan"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#22d3ee"/></marker>
+  <marker id="am-indigo" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#818cf8"/></marker>
+</defs>
+
+<!-- ══════════════ ARDUINO UNO ══════════════ -->
+<g filter="url(#pcb-sh)">
+  <rect x="360" y="210" width="240" height="320" rx="10" fill="#1a6b3c"/>
+  <rect x="365" y="215" width="230" height="310" rx="8" fill="#1d7a45"/>
+  <text x="480" y="236" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="9" fill="#86efac" letter-spacing="2" font-weight="700">ARDUINO UNO</text>
+  <!-- ATmega -->
+  <rect x="415" y="310" width="90" height="70" rx="3" fill="#111"/>
+  <text x="460" y="344" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#374151">ATmega328P</text>
+  <!-- chip legs -->
+  <g fill="#6b7280"><rect x="413" y="318" width="4" height="4" rx=".5"/><rect x="413" y="328" width="4" height="4" rx=".5"/><rect x="413" y="338" width="4" height="4" rx=".5"/><rect x="413" y="348" width="4" height="4" rx=".5"/><rect x="413" y="358" width="4" height="4" rx=".5"/><rect x="505" y="318" width="4" height="4" rx=".5"/><rect x="505" y="328" width="4" height="4" rx=".5"/><rect x="505" y="338" width="4" height="4" rx=".5"/><rect x="505" y="348" width="4" height="4" rx=".5"/><rect x="505" y="358" width="4" height="4" rx=".5"/></g>
+  <!-- Crystal -->
+  <rect x="460" y="296" width="20" height="10" rx="2" fill="#c0a000" stroke="#fbbf24" stroke-width=".5"/>
+  <text x="470" y="304" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="5" fill="#111">16MHz</text>
+  <!-- USB -->
+  <rect x="368" y="502" width="40" height="22" rx="3" fill="#2d3748" stroke="#4a5568" stroke-width="1"/>
+  <text x="388" y="516" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#718096">USB</text>
+  <!-- Reset -->
+  <rect x="556" y="292" width="14" height="14" rx="2" fill="#dc2626"/>
+  <text x="563" y="303" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="5" fill="white">RST</text>
+
+  <!-- RIGHT pin header bar -->
+  <rect x="596" y="268" width="10" height="230" rx="2" fill="#2d3748" stroke="#4a5568" stroke-width=".5"/>
+  <!-- D2–D12 pin circles + labels -->
+  <circle id="p-D2"  cx="601" cy="280" r="5" fill="#2d3748" stroke="#a78bfa" stroke-width="2" class="pin-node" data-net="clk"/>
+  <text x="591" y="284" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D2</text>
+  <circle id="p-D3"  cx="601" cy="298" r="5" fill="#2d3748" stroke="#c084fc" stroke-width="2" class="pin-node" data-net="dio"/>
+  <text x="591" y="302" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D3</text>
+  <circle id="p-D4"  cx="601" cy="316" r="5" fill="#2d3748" stroke="#f97316" stroke-width="2" class="pin-node" data-net="btn1"/>
+  <text x="591" y="320" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D4</text>
+  <circle id="p-D5"  cx="601" cy="334" r="5" fill="#2d3748" stroke="#fb923c" stroke-width="2" class="pin-node" data-net="btn2"/>
+  <text x="591" y="338" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D5</text>
+  <circle id="p-D6"  cx="601" cy="352" r="5" fill="#2d3748" stroke="#4ade80" stroke-width="2" class="pin-node" data-net="s1"/>
+  <text x="591" y="356" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D6</text>
+  <circle id="p-D7"  cx="601" cy="370" r="5" fill="#2d3748" stroke="#22c55e" stroke-width="2" class="pin-node" data-net="s2"/>
+  <text x="591" y="374" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D7</text>
+  <circle id="p-D8"  cx="601" cy="388" r="5" fill="#2d3748" stroke="#86efac" stroke-width="2" class="pin-node" data-net="key"/>
+  <text x="591" y="392" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D8</text>
+  <circle id="p-D9"  cx="601" cy="406" r="5" fill="#2d3748" stroke="#facc15" stroke-width="2" class="pin-node" data-net="servo"/>
+  <text x="591" y="410" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D9</text>
+  <circle id="p-D10" cx="601" cy="424" r="5" fill="#2d3748" stroke="#38bdf8" stroke-width="2" class="pin-node" data-net="in1"/>
+  <text x="591" y="428" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D10</text>
+  <circle id="p-D11" cx="601" cy="442" r="5" fill="#2d3748" stroke="#7dd3fc" stroke-width="2" class="pin-node" data-net="in2"/>
+  <text x="591" y="446" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D11</text>
+  <circle id="p-D12" cx="601" cy="460" r="5" fill="#2d3748" stroke="#f472b6" stroke-width="2" class="pin-node" data-net="neo"/>
+  <text x="591" y="464" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D12</text>
+
+  <!-- LEFT pin header bar -->
+  <rect x="364" y="268" width="10" height="230" rx="2" fill="#2d3748" stroke="#4a5568" stroke-width=".5"/>
+  <circle id="p-5V"  cx="369" cy="280" r="5" fill="#2d3748" stroke="#ef4444" stroke-width="2" class="pin-node" data-net="5v"/>
+  <text x="379" y="284" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#ef4444">5V</text>
+  <circle id="p-GND1" cx="369" cy="298" r="5" fill="#2d3748" stroke="#78716c" stroke-width="2" class="pin-node" data-net="gnd"/>
+  <text x="379" y="302" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#78716c">GND</text>
+  <circle id="p-GND2" cx="369" cy="316" r="5" fill="#2d3748" stroke="#78716c" stroke-width="2" class="pin-node" data-net="gnd"/>
+  <text x="379" y="320" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#78716c">GND</text>
+  <!-- Analog -->
+  <circle id="p-A0" cx="369" cy="370" r="5" fill="#2d3748" stroke="#34d399" stroke-width="2" class="pin-node" data-net="sw1"/>
+  <text x="379" y="374" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#34d399">A0</text>
+  <circle id="p-A1" cx="369" cy="388" r="5" fill="#2d3748" stroke="#2dd4bf" stroke-width="2" class="pin-node" data-net="sw2"/>
+  <text x="379" y="392" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#2dd4bf">A1</text>
+  <circle id="p-A2" cx="369" cy="406" r="5" fill="#2d3748" stroke="#22d3ee" stroke-width="2" class="pin-node" data-net="sw3"/>
+  <text x="379" y="410" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#22d3ee">A2</text>
+  <circle id="p-A3" cx="369" cy="424" r="5" fill="#2d3748" stroke="#38bdf8" stroke-width="2" class="pin-node" data-net="sw4"/>
+  <text x="379" y="428" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#38bdf8">A3</text>
+  <circle id="p-A4" cx="369" cy="442" r="5" fill="#2d3748" stroke="#818cf8" stroke-width="2" class="pin-node" data-net="sw5"/>
+  <text x="379" y="446" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#818cf8">A4</text>
+</g>
+
+<!-- ══════════════ MINI L298N ══════════════ -->
+<g filter="url(#pcb-sh)">
+  <rect x="680" y="330" width="130" height="115" rx="6" fill="#cc0000"/>
+  <rect x="685" y="335" width="120" height="105" rx="4" fill="#b91c1c"/>
+  <circle cx="692" cy="342" r="3" fill="#7f1d1d"/><circle cx="802" cy="342" r="3" fill="#7f1d1d"/>
+  <circle cx="692" cy="437" r="3" fill="#7f1d1d"/><circle cx="802" cy="437" r="3" fill="#7f1d1d"/>
+  <!-- IC chip -->
+  <rect x="710" y="350" width="60" height="52" rx="2" fill="#111"/>
+  <text x="740" y="372" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#6b7280">L298N</text>
+  <text x="740" y="384" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">MINI</text>
+  <g fill="#9ca3af"><rect x="707" y="355" width="4" height="4" rx=".5"/><rect x="707" y="364" width="4" height="4" rx=".5"/><rect x="707" y="373" width="4" height="4" rx=".5"/><rect x="769" y="355" width="4" height="4" rx=".5"/><rect x="769" y="364" width="4" height="4" rx=".5"/><rect x="769" y="373" width="4" height="4" rx=".5"/></g>
+  <text x="745" y="343" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#fca5a5" letter-spacing="1">MINI L298N</text>
+  <!-- Screw terminals left: IN1, IN2, GND+VIN -->
+  <rect x="685" y="408" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
+  <rect x="685" y="424" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
+  <rect x="685" y="440" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
+  <circle id="p-IN1" cx="693" cy="414" r="3.5" fill="#374151" stroke="#38bdf8" stroke-width="1.5" class="pin-node" data-net="in1"/>
+  <circle id="p-IN2" cx="693" cy="430" r="3.5" fill="#374151" stroke="#7dd3fc" stroke-width="1.5" class="pin-node" data-net="in2"/>
+  <circle id="p-VIN" cx="693" cy="446" r="3.5" fill="#374151" stroke="#fbbf24" stroke-width="1.5" class="pin-node" data-net="psu2"/>
+  <text x="683" y="419" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7" fill="#38bdf8">IN1</text>
+  <text x="683" y="435" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7" fill="#7dd3fc">IN2</text>
+  <text x="683" y="451" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7" fill="#fbbf24">VIN</text>
+  <!-- Screw terminals right: OUT+, OUT- -->
+  <rect x="799" y="408" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
+  <rect x="799" y="424" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
+  <circle id="p-OUT+" cx="807" cy="414" r="3.5" fill="#374151" stroke="#fb923c" stroke-width="1.5" class="pin-node" data-net="pump-pos"/>
+  <circle id="p-OUT-" cx="807" cy="430" r="3.5" fill="#374151" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="pump-neg"/>
+  <text x="817" y="419" font-family="JetBrains Mono,monospace" font-size="7" fill="#fb923c">OUT+</text>
+  <text x="817" y="435" font-family="JetBrains Mono,monospace" font-size="7" fill="#78716c">OUT-</text>
+</g>
+
+<!-- ══════════════ SERVO ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="720" y="100" width="110" height="72" rx="5" fill="#2d3748"/>
+  <rect x="726" y="106" width="98" height="60" rx="3" fill="#1a202c"/>
+  <rect x="775" y="90" width="16" height="16" rx="2" fill="#e2e8f0"/>
+  <circle cx="783" cy="98" r="4" fill="#a0aec0"/>
+  <text x="770" y="140" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#a0aec0" letter-spacing="1">SERVO</text>
+  <text x="770" y="152" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">SG90 / MG995</text>
+  <circle id="p-SIG" cx="734" cy="172" r="4" fill="#854d0e" stroke="#facc15" stroke-width="1.5" class="pin-node" data-net="servo"/>
+  <circle id="p-SV"  cx="750" cy="172" r="4" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
+  <circle id="p-SG"  cx="766" cy="172" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <text x="734" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#facc15">SIG</text>
+  <text x="750" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#ef4444">5V</text>
+  <text x="766" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
+</g>
+
+<!-- ══════════════ TM1637 ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="50" y="28" width="178" height="74" rx="6" fill="#130a2a"/>
+  <rect x="56" y="34" width="166" height="48" rx="3" fill="#0a001a"/>
+  <rect x="60" y="38" width="152" height="38" rx="2" fill="#060006" stroke="#4c1d95" stroke-width="1"/>
+  <text x="136" y="63" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="22" fill="#7c3aed" letter-spacing="5">A 10</text>
+  <text x="139" y="95" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#a78bfa" letter-spacing="2">TM1637</text>
+  <circle id="p-CLK" cx="82"  cy="108" r="4" fill="#7c3aed" stroke="#a78bfa" stroke-width="1.5" class="pin-node" data-net="clk"/>
+  <circle id="p-DIO" cx="104" cy="108" r="4" fill="#6d28d9" stroke="#c084fc" stroke-width="1.5" class="pin-node" data-net="dio"/>
+  <circle id="p-TV"  cx="126" cy="108" r="4" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
+  <circle id="p-TG"  cx="148" cy="108" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <text x="82"  y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#a78bfa">CLK</text>
+  <text x="104" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#c084fc">DIO</text>
+  <text x="126" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#ef4444">VCC</text>
+  <text x="148" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#78716c">GND</text>
+</g>
+
+<!-- ══════════════ NEOPIXEL ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="50" y="148" width="220" height="52" rx="5" fill="#0a0a1a" stroke="#db2777" stroke-width="1.5"/>
+  <rect x="58"  y="158" width="28" height="28" rx="3" fill="#831843"/><circle cx="72"  cy="172" r="8" fill="#f472b6" opacity=".9" filter="url(#glow)"/>
+  <rect x="96"  y="158" width="28" height="28" rx="3" fill="#1e3a5f"/><circle cx="110" cy="172" r="8" fill="#38bdf8" opacity=".9" filter="url(#glow)"/>
+  <rect x="134" y="158" width="28" height="28" rx="3" fill="#14532d"/><circle cx="148" cy="172" r="8" fill="#4ade80" opacity=".9" filter="url(#glow)"/>
+  <rect x="172" y="158" width="28" height="28" rx="3" fill="#78350f"/><circle cx="186" cy="172" r="8" fill="#fb923c" opacity=".9" filter="url(#glow)"/>
+  <rect x="210" y="158" width="28" height="28" rx="3" fill="#4c1d95"/><circle cx="224" cy="172" r="8" fill="#a78bfa" opacity=".9" filter="url(#glow)"/>
+  <text x="140" y="210" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#f472b6" letter-spacing="2">NEOPIXEL ×5</text>
+  <circle id="p-DIN" cx="80"  cy="216" r="4" fill="#db2777" stroke="#f472b6" stroke-width="1.5" class="pin-node" data-net="neo"/>
+  <circle id="p-NV"  cx="106" cy="216" r="4" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
+  <circle id="p-NG"  cx="132" cy="216" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <text x="80"  y="228" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#f472b6">DIN</text>
+  <text x="106" y="228" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#ef4444">5V</text>
+  <text x="132" y="228" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#78716c">GND</text>
+</g>
+
+<!-- ══════════════ BUTTONS ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="50" y="258" width="76" height="78" rx="6" fill="#1c0a00" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="88" y="274" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#f97316" letter-spacing="1">BTN 1</text>
+  <text x="88" y="284" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">ON/OFF</text>
+  <circle cx="88" cy="305" r="14" fill="#7c2d12" stroke="#f97316" stroke-width="2.5"/>
+  <circle cx="88" cy="305" r="7" fill="#c2410c"/>
+  <circle id="p-B1G" cx="72" cy="328" r="3.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <circle id="p-B1S" cx="104" cy="328" r="3.5" fill="#7c2d12" stroke="#f97316" stroke-width="1.5" class="pin-node" data-net="btn1"/>
+  <text x="72"  y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
+  <text x="104" y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#f97316">D4</text>
+</g>
+<g filter="url(#shadow)">
+  <rect x="148" y="258" width="76" height="78" rx="6" fill="#1c0500" stroke="#c2410c" stroke-width="1.5"/>
+  <text x="186" y="274" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#fb923c" letter-spacing="1">BTN 2</text>
+  <text x="186" y="284" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">SERVE</text>
+  <circle cx="186" cy="305" r="14" fill="#7c2d12" stroke="#fb923c" stroke-width="2.5"/>
+  <circle cx="186" cy="305" r="7" fill="#c2410c"/>
+  <circle id="p-B2G" cx="170" cy="328" r="3.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <circle id="p-B2S" cx="202" cy="328" r="3.5" fill="#7c2d12" stroke="#fb923c" stroke-width="1.5" class="pin-node" data-net="btn2"/>
+  <text x="170" y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
+  <text x="202" y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#fb923c">D5</text>
+</g>
+
+<!-- ══════════════ ENCODER ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="50" y="366" width="130" height="106" rx="6" fill="#001a08" stroke="#16a34a" stroke-width="1.5"/>
+  <text x="115" y="384" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#4ade80" letter-spacing="1">ENCODER</text>
+  <circle cx="115" cy="422" r="24" fill="#052e16" stroke="#16a34a" stroke-width="2.5"/>
+  <circle cx="115" cy="422" r="13" fill="#14532d" stroke="#4ade80" stroke-width="1.5"/>
+  <circle cx="115" cy="422" r="4" fill="#052e16"/>
+  <line x1="115" y1="410" x2="115" y2="417" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+  <circle id="p-ES1" cx="63"  cy="458" r="3.5" fill="#14532d" stroke="#4ade80"  stroke-width="1.5" class="pin-node" data-net="s1"/>
+  <circle id="p-ES2" cx="80"  cy="458" r="3.5" fill="#14532d" stroke="#22c55e"  stroke-width="1.5" class="pin-node" data-net="s2"/>
+  <circle id="p-EK"  cx="97"  cy="458" r="3.5" fill="#14532d" stroke="#86efac"  stroke-width="1.5" class="pin-node" data-net="key"/>
+  <circle id="p-EV"  cx="114" cy="458" r="3.5" fill="#991b1b" stroke="#ef4444"  stroke-width="1.5" class="pin-node" data-net="5v"/>
+  <circle id="p-EG"  cx="131" cy="458" r="3.5" fill="#1e293b" stroke="#78716c"  stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <text x="63"  y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4ade80">S1</text>
+  <text x="80"  y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#22c55e">S2</text>
+  <text x="97"  y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#86efac">KEY</text>
+  <text x="114" y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#ef4444">5V</text>
+  <text x="131" y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
+</g>
+
+<!-- ══════════════ LIMIT SWITCHES ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="50" y="495" width="240" height="196" rx="6" fill="#001020" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="170" y="513" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#38bdf8" letter-spacing="1">LIMIT SWITCHES</text>
+  <text x="170" y="525" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#4b5563">5× — one per glass slot</text>
+  <!-- SW1 -->
+  <rect x="60" y="532" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
+  <rect x="76" y="537" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
+  <rect x="80" y="534" width="4" height="6" rx="1" fill="#60a5fa"/>
+  <text x="66" y="562" font-family="JetBrains Mono,monospace" font-size="6" fill="#34d399">SW1→A0</text>
+  <circle id="p-SW1S" cx="64"  cy="543" r="3" fill="#34d399" stroke="#34d399" stroke-width="1" class="pin-node" data-net="sw1"/>
+  <circle id="p-SW1G" cx="108" cy="543" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
+  <!-- SW2 -->
+  <rect x="130" y="532" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
+  <rect x="146" y="537" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
+  <rect x="150" y="534" width="4" height="6" rx="1" fill="#60a5fa"/>
+  <text x="136" y="562" font-family="JetBrains Mono,monospace" font-size="6" fill="#2dd4bf">SW2→A1</text>
+  <circle id="p-SW2S" cx="134" cy="543" r="3" fill="#2dd4bf" stroke="#2dd4bf" stroke-width="1" class="pin-node" data-net="sw2"/>
+  <circle id="p-SW2G" cx="178" cy="543" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
+  <!-- SW3 -->
+  <rect x="60" y="580" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
+  <rect x="76" y="585" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
+  <rect x="80" y="582" width="4" height="6" rx="1" fill="#60a5fa"/>
+  <text x="66" y="610" font-family="JetBrains Mono,monospace" font-size="6" fill="#22d3ee">SW3→A2</text>
+  <circle id="p-SW3S" cx="64"  cy="591" r="3" fill="#22d3ee" stroke="#22d3ee" stroke-width="1" class="pin-node" data-net="sw3"/>
+  <circle id="p-SW3G" cx="108" cy="591" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
+  <!-- SW4 -->
+  <rect x="130" y="580" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
+  <rect x="146" y="585" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
+  <rect x="150" y="582" width="4" height="6" rx="1" fill="#60a5fa"/>
+  <text x="136" y="610" font-family="JetBrains Mono,monospace" font-size="6" fill="#38bdf8">SW4→A3</text>
+  <circle id="p-SW4S" cx="134" cy="591" r="3" fill="#38bdf8" stroke="#38bdf8" stroke-width="1" class="pin-node" data-net="sw4"/>
+  <circle id="p-SW4G" cx="178" cy="591" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
+  <!-- SW5 -->
+  <rect x="95" y="628" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
+  <rect x="111" y="633" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
+  <rect x="115" y="630" width="4" height="6" rx="1" fill="#60a5fa"/>
+  <text x="101" y="658" font-family="JetBrains Mono,monospace" font-size="6" fill="#818cf8">SW5→A4</text>
+  <circle id="p-SW5S" cx="99"  cy="639" r="3" fill="#818cf8" stroke="#818cf8" stroke-width="1" class="pin-node" data-net="sw5"/>
+  <circle id="p-SW5G" cx="143" cy="639" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
+</g>
+
+<!-- ══════════════ DC PUMP ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="720" y="580" width="130" height="100" rx="6" fill="#1a0800" stroke="#b45309" stroke-width="1.5"/>
+  <text x="785" y="598" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#fbbf24" letter-spacing="1">DC PUMP</text>
+  <ellipse cx="770" cy="645" rx="30" ry="26" fill="#0f0800" stroke="#92400e" stroke-width="2"/>
+  <ellipse cx="770" cy="645" rx="14" ry="14" fill="#1c1200" stroke="#b45309" stroke-width="1.5"/>
+  <ellipse cx="770" cy="645" rx="4"  ry="4"  fill="#92400e"/>
+  <circle id="p-PP" cx="820" cy="613" r="4" fill="#7c2d12" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="pump-pos"/>
+  <circle id="p-PN" cx="836" cy="613" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="pump-neg"/>
+  <text x="820" y="604" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#fb923c">+</text>
+  <text x="836" y="604" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">-</text>
+</g>
+
+<!-- ══════════════ POWER SUPPLIES ══════════════ -->
+<g filter="url(#shadow)">
+  <rect x="370" y="28" width="230" height="82" rx="7" fill="#1c0800" stroke="#ea580c" stroke-width="1.5"/>
+  <text x="485" y="47" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="9" fill="#fb923c" letter-spacing="2">POWER SUPPLIES</text>
+  <!-- PSU1 -->
+  <rect x="382" y="54" width="96" height="46" rx="4" fill="#0f0300" stroke="#c2410c" stroke-width="1"/>
+  <text x="430" y="68" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#f97316">PSU 1 — 5V</text>
+  <text x="430" y="79" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#7c2d12">Logic / Servo</text>
+  <circle id="p-P1+" cx="410" cy="92" r="4.5" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
+  <circle id="p-P1-" cx="430" cy="92" r="4.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <text x="410" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#ef4444">+5V</text>
+  <text x="430" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
+  <!-- PSU2 -->
+  <rect x="490" y="54" width="96" height="46" rx="4" fill="#0f0c00" stroke="#ca8a04" stroke-width="1"/>
+  <text x="538" y="68" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#fbbf24">PSU 2 — 12V</text>
+  <text x="538" y="79" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#92400e">Motor/Pump</text>
+  <circle id="p-P2+" cx="518" cy="92" r="4.5" fill="#1a1500" stroke="#fbbf24" stroke-width="1.5" class="pin-node" data-net="psu2"/>
+  <circle id="p-P2-" cx="538" cy="92" r="4.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
+  <text x="518" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#fbbf24">+V</text>
+  <text x="538" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
+</g>
+
+<!-- ══════════════ GND RAIL ══════════════ -->
+<rect x="220" y="770" width="640" height="14" rx="4" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
+<text x="540" y="781" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#64748b" letter-spacing="3">COMMON GROUND</text>
+
+<!-- ══════════════════════════════════════════════════════
+     WIRE GROUPS — each wrapped in <g class="wire" data-net="...">
+══════════════════════════════════════════════════════ -->
+
+<!-- 5V rail -->
+<g class="wire" data-net="5v" data-label="5V Power" data-from="PSU1 +5V" data-to="Arduino 5V / Servo / NeoPixel / Encoder">
+  <path d="M410,92 L410,140 L340,140 L340,280 L364,280" fill="none" stroke="#ef4444" stroke-width="2.2" marker-end="url(#am-red)"/>
+  <path d="M750,172 L750,190 L348,190 L348,280 L364,280" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
+  <path d="M106,216 L106,140 L410,140" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
+  <path d="M114,458 L114,280 L364,280" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
+  <path d="M126,108 L126,140 L410,140" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
+</g>
+
+<!-- GND rail -->
+<g class="wire" data-net="gnd" data-label="Common Ground" data-from="All GNDs" data-to="Common Ground Rail">
+  <path d="M430,92 L430,770" fill="none" stroke="#78716c" stroke-width="1.6" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
+  <path d="M538,92 L538,770" fill="none" stroke="#78716c" stroke-width="1.6" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
+  <path d="M369,298 L308,298 L308,770 L220,770" fill="none" stroke="#78716c" stroke-width="1.8" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
+  <path d="M148,108 L148,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
+  <path d="M132,216 L132,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
+  <path d="M72,328 L72,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
+  <path d="M170,328 L170,774 L220,774" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
+  <path d="M131,470 L131,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
+  <path d="M766,172 L766,766 L860,766 L860,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
+  <path d="M108,543 L230,543 L230,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#am-gnd)"/>
+  <path d="M178,543 L234,543 L234,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <path d="M108,591 L238,591 L238,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <path d="M178,591 L242,591 L242,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <path d="M143,639 L246,639 L246,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
+  <path d="M693,446 L660,446 L660,770" fill="none" stroke="#78716c" stroke-width="1.6" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
+</g>
+
+<!-- PSU2 → L298N VIN -->
+<g class="wire" data-net="psu2" data-label="Motor Power" data-from="PSU2 +12V" data-to="Mini L298N VIN">
+  <path d="M518,92 L518,148 L658,148 L658,446 L685,446" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#am-yellow)"/>
+</g>
+
+<!-- TM1637 CLK → D2 -->
+<g class="wire" data-net="clk" data-label="TM1637 Clock" data-from="TM1637 CLK" data-to="Arduino D2">
+  <path d="M82,108 L82,132 L636,132 L636,280 L606,280" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#am-purple)"/>
+</g>
+
+<!-- TM1637 DIO → D3 -->
+<g class="wire" data-net="dio" data-label="TM1637 Data" data-from="TM1637 DIO" data-to="Arduino D3">
+  <path d="M104,108 L104,137 L641,137 L641,298 L606,298" fill="none" stroke="#c084fc" stroke-width="2" marker-end="url(#am-violet)"/>
+</g>
+
+<!-- NeoPixel DIN → D12 -->
+<g class="wire" data-net="neo" data-label="NeoPixel Data" data-from="NeoPixel DIN" data-to="Arduino D12">
+  <path d="M80,216 L80,236 L648,236 L648,460 L606,460" fill="none" stroke="#f472b6" stroke-width="2" marker-end="url(#am-pink)"/>
+</g>
+
+<!-- BTN1 → D4 -->
+<g class="wire" data-net="btn1" data-label="Button 1" data-from="Button 1 signal" data-to="Arduino D4">
+  <path d="M104,328 L104,356 L652,356 L652,316 L606,316" fill="none" stroke="#f97316" stroke-width="2" marker-end="url(#am-orange)"/>
+</g>
+
+<!-- BTN2 → D5 -->
+<g class="wire" data-net="btn2" data-label="Button 2" data-from="Button 2 signal" data-to="Arduino D5">
+  <path d="M202,328 L202,362 L657,362 L657,334 L606,334" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#am-amber)"/>
+</g>
+
+<!-- Encoder S1 → D6 -->
+<g class="wire" data-net="s1" data-label="Encoder S1" data-from="Encoder S1" data-to="Arduino D6">
+  <path d="M63,458 L63,488 L662,488 L662,352 L606,352" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#am-green)"/>
+</g>
+
+<!-- Encoder S2 → D7 -->
+<g class="wire" data-net="s2" data-label="Encoder S2" data-from="Encoder S2" data-to="Arduino D7">
+  <path d="M80,458 L80,494 L667,494 L667,370 L606,370" fill="none" stroke="#22c55e" stroke-width="2" marker-end="url(#am-lime)"/>
+</g>
+
+<!-- Encoder KEY → D8 -->
+<g class="wire" data-net="key" data-label="Encoder KEY" data-from="Encoder KEY button" data-to="Arduino D8">
+  <path d="M97,458 L97,500 L672,500 L672,388 L606,388" fill="none" stroke="#86efac" stroke-width="2" marker-end="url(#am-mint)"/>
+</g>
+
+<!-- Servo SIG → D9 -->
+<g class="wire" data-net="servo" data-label="Servo Signal" data-from="Servo SIG (yellow)" data-to="Arduino D9">
+  <path d="M734,172 L734,196 L678,196 L678,406 L606,406" fill="none" stroke="#facc15" stroke-width="2.5" marker-end="url(#am-yellow)"/>
+</g>
+
+<!-- D10 → L298N IN1 -->
+<g class="wire" data-net="in1" data-label="Motor Control IN1" data-from="Arduino D10" data-to="Mini L298N IN1">
+  <path d="M606,424 L658,424 L658,414 L685,414" fill="none" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#am-sky)"/>
+</g>
+
+<!-- D11 → L298N IN2 -->
+<g class="wire" data-net="in2" data-label="Motor Control IN2" data-from="Arduino D11" data-to="Mini L298N IN2">
+  <path d="M606,442 L661,442 L661,430 L685,430" fill="none" stroke="#7dd3fc" stroke-width="2.5" marker-end="url(#am-blue)"/>
+</g>
+
+<!-- L298N OUT+ → Pump+ -->
+<g class="wire" data-net="pump-pos" data-label="Pump Power +" data-from="L298N OUT+" data-to="DC Pump +">
+  <path d="M807,414 L858,414 L858,613 L824,613" fill="none" stroke="#fb923c" stroke-width="2.5" marker-end="url(#am-amber)"/>
+</g>
+
+<!-- L298N OUT- → Pump- -->
+<g class="wire" data-net="pump-neg" data-label="Pump Power −" data-from="L298N OUT−" data-to="DC Pump −">
+  <path d="M807,430 L862,430 L862,620 L840,620" fill="none" stroke="#78716c" stroke-width="1.8" marker-end="url(#am-gnd)"/>
+</g>
+
+<!-- Limit SW1 → A0 -->
+<g class="wire" data-net="sw1" data-label="Limit Switch 1" data-from="Limit SW1 signal" data-to="Arduino A0">
+  <path d="M64,543 L38,543 L38,370 L364,370" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#am-teal)"/>
+</g>
+
+<!-- Limit SW2 → A1 -->
+<g class="wire" data-net="sw2" data-label="Limit Switch 2" data-from="Limit SW2 signal" data-to="Arduino A1">
+  <path d="M134,543 L34,543 L34,388 L364,388" fill="none" stroke="#2dd4bf" stroke-width="2" marker-end="url(#am-teal)"/>
+</g>
+
+<!-- Limit SW3 → A2 -->
+<g class="wire" data-net="sw3" data-label="Limit Switch 3" data-from="Limit SW3 signal" data-to="Arduino A2">
+  <path d="M64,591 L30,591 L30,406 L364,406" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#am-cyan)"/>
+</g>
+
+<!-- Limit SW4 → A3 -->
+<g class="wire" data-net="sw4" data-label="Limit Switch 4" data-from="Limit SW4 signal" data-to="Arduino A3">
+  <path d="M134,591 L26,591 L26,424 L364,424" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#am-sky)"/>
+</g>
+
+<!-- Limit SW5 → A4 -->
+<g class="wire" data-net="sw5" data-label="Limit Switch 5" data-from="Limit SW5 signal" data-to="Arduino A4">
+  <path d="M99,639 L22,639 L22,442 L364,442" fill="none" stroke="#818cf8" stroke-width="2" marker-end="url(#am-indigo)"/>
+</g>
+
+</svg>
+</div><!-- end board -->
+
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+  <div class="s-title">CONNECTIONS — CLICK TO HIGHLIGHT</div>
+
+  <div class="conn-row" data-net="5v">       <div class="conn-dot" style="background:#ef4444"></div><span class="conn-from">5V Power</span>      <span class="conn-to">PSU1→All</span></div>
+  <div class="conn-row" data-net="gnd">      <div class="conn-dot" style="background:#78716c"></div><span class="conn-from">GND Rail</span>      <span class="conn-to">All→Rail</span></div>
+  <div class="conn-row" data-net="psu2">     <div class="conn-dot" style="background:#fbbf24"></div><span class="conn-from">Motor Power</span>   <span class="conn-to">PSU2→L298N</span></div>
+  <div class="s-gap"></div>
+  <div class="conn-row" data-net="clk">      <div class="conn-dot" style="background:#a78bfa"></div><span class="conn-from">TM1637 CLK</span>    <span class="conn-to">→ D2</span></div>
+  <div class="conn-row" data-net="dio">      <div class="conn-dot" style="background:#c084fc"></div><span class="conn-from">TM1637 DIO</span>    <span class="conn-to">→ D3</span></div>
+  <div class="conn-row" data-net="btn1">     <div class="conn-dot" style="background:#f97316"></div><span class="conn-from">Button 1</span>      <span class="conn-to">→ D4</span></div>
+  <div class="conn-row" data-net="btn2">     <div class="conn-dot" style="background:#fb923c"></div><span class="conn-from">Button 2</span>      <span class="conn-to">→ D5</span></div>
+  <div class="conn-row" data-net="s1">       <div class="conn-dot" style="background:#4ade80"></div><span class="conn-from">Encoder S1</span>    <span class="conn-to">→ D6</span></div>
+  <div class="conn-row" data-net="s2">       <div class="conn-dot" style="background:#22c55e"></div><span class="conn-from">Encoder S2</span>    <span class="conn-to">→ D7</span></div>
+  <div class="conn-row" data-net="key">      <div class="conn-dot" style="background:#86efac"></div><span class="conn-from">Encoder KEY</span>   <span class="conn-to">→ D8</span></div>
+  <div class="conn-row" data-net="servo">    <div class="conn-dot" style="background:#facc15"></div><span class="conn-from">Servo Signal</span>  <span class="conn-to">→ D9</span></div>
+  <div class="conn-row" data-net="in1">      <div class="conn-dot" style="background:#38bdf8"></div><span class="conn-from">L298N IN1</span>     <span class="conn-to">← D10</span></div>
+  <div class="conn-row" data-net="in2">      <div class="conn-dot" style="background:#7dd3fc"></div><span class="conn-from">L298N IN2</span>     <span class="conn-to">← D11</span></div>
+  <div class="conn-row" data-net="neo">      <div class="conn-dot" style="background:#f472b6"></div><span class="conn-from">NeoPixel DIN</span>  <span class="conn-to">→ D12</span></div>
+  <div class="s-gap"></div>
+  <div class="conn-row" data-net="sw1">      <div class="conn-dot" style="background:#34d399"></div><span class="conn-from">Limit SW 1</span>    <span class="conn-to">→ A0</span></div>
+  <div class="conn-row" data-net="sw2">      <div class="conn-dot" style="background:#2dd4bf"></div><span class="conn-from">Limit SW 2</span>    <span class="conn-to">→ A1</span></div>
+  <div class="conn-row" data-net="sw3">      <div class="conn-dot" style="background:#22d3ee"></div><span class="conn-from">Limit SW 3</span>    <span class="conn-to">→ A2</span></div>
+  <div class="conn-row" data-net="sw4">      <div class="conn-dot" style="background:#38bdf8"></div><span class="conn-from">Limit SW 4</span>    <span class="conn-to">→ A3</span></div>
+  <div class="conn-row" data-net="sw5">      <div class="conn-dot" style="background:#818cf8"></div><span class="conn-from">Limit SW 5</span>    <span class="conn-to">→ A4</span></div>
+  <div class="s-gap"></div>
+  <div class="conn-row" data-net="pump-pos"> <div class="conn-dot" style="background:#fb923c"></div><span class="conn-from">Pump +</span>        <span class="conn-to">OUT+</span></div>
+  <div class="conn-row" data-net="pump-neg"> <div class="conn-dot" style="background:#78716c"></div><span class="conn-from">Pump −</span>        <span class="conn-to">OUT−</span></div>
+
+  <div class="note warn"><b>⚠ TWO SUPPLIES</b>PSU1 (5V) → logic, servo, NeoPixels.<br>PSU2 (5–12V) → L298N VIN + pump.<br>All GNDs must share common ground.</div>
+  <div class="note info"><b>💡 MINI L298N</b>No ENA jumper. No separate logic pin. VIN, GND, IN1, IN2, OUT+, OUT− only.</div>
+  <div class="note info"><b>💡 BUTTONS</b>One leg → D4/D5. Other leg → GND. No resistor — uses INPUT_PULLUP.</div>
+</div>
+</div><!-- end wrap -->
+
+<script>
+const tip = document.getElementById('tip');
+let activeNet = null;
+
+// collect all wire groups and pin nodes by net
+const wires = [...document.querySelectorAll('.wire[data-net]')];
+const pins  = [...document.querySelectorAll('.pin-node[data-net]')];
+const rows  = [...document.querySelectorAll('.conn-row[data-net]')];
+
+function getNet(el) { return el.dataset.net; }
+
+function activate(net) {
+  if (activeNet === net) { deactivate(); return; }
+  activeNet = net;
+
+  // wires
+  wires.forEach(w => {
+    if (getNet(w) === net) { w.classList.add('active'); w.classList.remove('faded'); }
+    else { w.classList.add('faded'); w.classList.remove('active'); }
+  });
+
+  // pins
+  pins.forEach(p => {
+    if (getNet(p) === net) p.classList.add('active');
+    else p.classList.remove('active');
+  });
+
+  // sidebar rows
+  rows.forEach(r => {
+    if (getNet(r) === net) r.classList.add('active');
+    else r.classList.remove('active');
+  });
+}
+
+function deactivate() {
+  activeNet = null;
+  wires.forEach(w => { w.classList.remove('active','faded'); });
+  pins.forEach(p => p.classList.remove('active'));
+  rows.forEach(r => r.classList.remove('active'));
+  tip.style.display = 'none';
+}
+
+// Wire click
+wires.forEach(w => {
+  w.addEventListener('click', e => {
+    e.stopPropagation();
+    const net = getNet(w);
+    activate(net);
+    // tooltip
+    tip.innerHTML = `<div class="tip-from">${w.dataset.from}</div>
+      <div class="tip-to">${w.dataset.label}</div>
+      <div class="tip-pin">${w.dataset.to}</div>`;
+    tip.style.display = 'block';
+  });
+  w.addEventListener('mousemove', e => {
+    if (activeNet === getNet(w)) {
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top  = (e.clientY - 10) + 'px';
+    }
+  });
+});
+
+// Pin click
+pins.forEach(p => {
+  p.addEventListener('click', e => {
+    e.stopPropagation();
+    const net = getNet(p);
+    // find wire info
+    const wire = wires.find(w => getNet(w) === net);
+    activate(net);
+    if (wire) {
+      tip.innerHTML = `<div class="tip-from">${wire.dataset.from}</div>
+        <div class="tip-to">${wire.dataset.label}</div>
+        <div class="tip-pin">${wire.dataset.to}</div>`;
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top  = (e.clientY - 10) + 'px';
+      tip.style.display = 'block';
+    }
+  });
+});
+
+// Sidebar row click
+rows.forEach(r => {
+  r.addEventListener('click', e => {
+    e.stopPropagation();
+    const net = getNet(r);
+    const wire = wires.find(w => getNet(w) === net);
+    activate(net);
+    if (wire) {
+      const rect = r.getBoundingClientRect();
+      tip.innerHTML = `<div class="tip-from">${wire.dataset.from}</div>
+        <div class="tip-to">${wire.dataset.label}</div>
+        <div class="tip-pin">${wire.dataset.to}</div>`;
+      tip.style.left = (rect.left - 240) + 'px';
+      tip.style.top  = (rect.top) + 'px';
+      tip.style.display = 'block';
+    }
+  });
+});
+
+// Click background to deactivate
+document.getElementById('svg').addEventListener('click', deactivate);
+</script>
+</body>
+</html>
