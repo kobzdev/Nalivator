@@ -305,6 +305,44 @@ let drinkCount=0,totalMl=0,showStats=false;
 let encAngle=0;
 let slots=Array.from({length:NUM},(_,i)=>({id:i,present:false,full:false,fill:0,state:'empty'}));
 
+// Screensaver
+let saverTimer=null, saverOn=false;
+let saverX=80,saverY=20,saverVX=2,saverVY=2;
+const SAVER_IDLE=60000; // 60s
+let lastActivity=Date.now();
+
+function resetActivity(){
+  lastActivity=Date.now();
+  if(saverOn){ saverOn=false; clearInterval(saverTimer); saverTimer=null; updateMachineOLED(); }
+}
+function startSaverCheck(){
+  setInterval(()=>{
+    if(!systemOn||serving) return;
+    if(Date.now()-lastActivity>SAVER_IDLE && !saverOn){
+      saverOn=true;
+      saverTimer=setInterval(drawSaver,60);
+    }
+  },1000);
+}
+function drawSaver(){
+  const og=document.getElementById('moled-content');
+  if(!og||!saverOn) return;
+  og.innerHTML='';
+  const ox=M.OLED_X+5,oy=M.OLED_Y+5,ow=M.OLED_W-10,oh=M.OLED_H-24;
+  // scale drop position to OLED screen area
+  const sx=ox+Math.round(saverX/128*ow);
+  const sy=oy+Math.round(saverY/64*oh);
+  // body circle
+  og.appendChild(cc(sx,sy+3,Math.round(ow*0.045),{fill:'#a78bfa'}));
+  // teardrop tip
+  og.appendChild(e('polygon',{points:`${sx-3},${sy+1} ${sx+3},${sy+1} ${sx},${sy-4}`,fill:'#a78bfa'}));
+  // shine
+  og.appendChild(cc(sx-1,sy+2,1,{fill:'#1e1040'}));
+  saverX+=saverVX; saverY+=saverVY;
+  if(saverX-7<=0||saverX+7>=127) saverVX=-saverVX;
+  if(saverY-5<=0||saverY+12>=63) saverVY=-saverVY;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  PAGE NAV
 // ═══════════════════════════════════════════════════════════════════
@@ -567,31 +605,149 @@ function setMGlass(i){
   setMNeo(i,nm[s.state]||'off');
 }
 
+// Dog pee animation — stream arc coords (12 steps, OLED pixel space 128x64)
+const ARC_X=[8,14,20,27,34,41,48,55,61,66,70,72];
+const ARC_Y=[35,33,32,31,32,33,35,37,39,41,43,45];
+let dogStreamOff=0, dogAnimTimer=null;
+
+function startDogAnim(og,ox,oy,ow,oh,servIdx,tgt){
+  if(dogAnimTimer)return;
+  dogAnimTimer=setInterval(()=>{
+    dogStreamOff=(dogStreamOff+1)%12;
+    const s=slots[servIdx];
+    if(!s||!serving){stopWaveAnim();return;}
+    drawOLEDDog(og,ox,oy,ow,oh,servIdx,Math.round((s.fill/100)*tgt),tgt);
+  },60);
+}
+
+function stopWaveAnim(){
+  if(dogAnimTimer){clearInterval(dogAnimTimer);dogAnimTimer=null;}
+  if(waveTimer){clearInterval(waveTimer);waveTimer=null;}
+}
+
+// Scale OLED pixel coords (0..127, 0..63) to SVG screen rect
+function opx(ox,ow,x){return ox + x*(ow/128);}
+function opy(oy,oh,y){return oy + y*(oh/64);}
+function opw(ow,w){return w*(ow/128);}
+function oph2(oh,h){return h*(oh/64);}
+
+function drawOLEDDog(og,ox,oy,ow,oh,servIdx,disp,tgt){
+  og.innerHTML='';
+  if(tgt<=0)tgt=1;
+  const pct=Math.min(Math.round(disp*100/tgt),100);
+  const p=(x,y,w=1,h=1,col='#a78bfa')=>og.appendChild(r(opx(ox,ow,x),opy(oy,oh,y),opw(ow,w),oph2(oh,h),{fill:col}));
+  const px=(x,y,col='#a78bfa')=>p(x,y,1,1,col);
+  const ln2=(x1,y1,x2,y2)=>{
+    // Draw line as series of pixels
+    const dx=Math.abs(x2-x1),dy=Math.abs(y2-y1);
+    const sx=x1<x2?1:-1,sy=y1<y2?1:-1;
+    let err=dx-dy,cx2=x1,cy2=y1;
+    while(true){px(cx2,cy2);if(cx2===x2&&cy2===y2)break;const e2=2*err;if(e2>-dy){err-=dy;cx2+=sx;}if(e2<dx){err+=dx;cy2+=sy;}}
+  };
+
+  // ── TOP BAR ──────────────────────────────────────────────────────
+  og.appendChild(r(opx(ox,ow,0),opy(oy,oh,0),opw(ow,58),oph2(oh,12),{rx:2,fill:'#a78bfa'}));
+  og.appendChild(t(opx(ox,ow,4)+opw(ow,27),opy(oy,oh,2)+oph2(oh,5),`SLOT ${servIdx+1}`,{'text-anchor':'middle','font-size':6.5,fill:'#1e1040','font-weight':700}));
+  og.appendChild(t(opx(ox,ow,122),opy(oy,oh,2)+oph2(oh,5),`${pct}%`,{'text-anchor':'end','font-size':6.5,fill:'#a78bfa','font-weight':600}));
+  og.appendChild(e('line',{x1:opx(ox,ow,0),y1:opy(oy,oh,13),x2:opx(ox,ow,127),y2:opy(oy,oh,13),stroke:'#4c1d95','stroke-width':.5}));
+
+  // ── DOG BODY ──────────────────────────────────────────────────────
+  // torso
+  p(10,26,20,12); p(10,27,20,10,'#060008'); p(11,28,18,8);
+  og.appendChild(e('ellipse',{cx:opx(ox,ow,20),cy:opy(oy,oh,32),rx:opw(ow,9),ry:oph2(oh,5),fill:'#a78bfa'}));
+  // head
+  og.appendChild(e('ellipse',{cx:opx(ox,ow,33),cy:opy(oy,oh,21),rx:opw(ow,6),ry:oph2(oh,5.5),fill:'#a78bfa'}));
+  // snout
+  og.appendChild(e('ellipse',{cx:opx(ox,ow,37),cy:opy(oy,oh,23),rx:opw(ow,3),ry:oph2(oh,2.5),fill:'#7c3aed'}));
+  // eye
+  px(32,20,'#060008');
+  // nose dot
+  px(38,22,'#060008');
+  // ear
+  ln2(34,16,38,16); ln2(38,16,36,21); ln2(36,21,34,18); ln2(34,18,34,16);
+  // tail — wags based on streamOff
+  if(Math.floor(dogStreamOff/4)%2===0){ln2(10,28,5,22);px(4,21);}
+  else{ln2(10,28,4,26);px(3,25);}
+  // front legs
+  ln2(18,38,17,50); ln2(20,38,19,50);
+  // back leg down
+  ln2(12,38,11,50); ln2(14,38,13,50);
+  // raised leg
+  ln2(12,36,8,30); ln2(8,30,5,36); px(5,37);
+
+  // ── PEE STREAM ARC ────────────────────────────────────────────────
+  for(let p2=0;p2<5;p2++){
+    const i=(dogStreamOff+p2)%12;
+    px(ARC_X[i], ARC_Y[i],'#c084fc');
+    if(ARC_Y[i]+1<64) px(ARC_X[i], ARC_Y[i]+1,'#c084fc');
+  }
+
+  // ── GLASS (right side) ────────────────────────────────────────────
+  const GX=72,GY=16,GW=24,GH=38;
+  ln2(GX,GY,GX,GY+GH);       // left wall
+  ln2(GX+GW,GY,GX+GW,GY+GH); // right wall
+  ln2(GX,GY+GH,GX+GW,GY+GH); // bottom
+  // water fill
+  const fillH2=Math.round(pct*(GH-2)/100);
+  const fillY2=GY+GH-fillH2;
+  if(fillH2>0) og.appendChild(r(opx(ox,ow,GX+1),opy(oy,oh,fillY2),opw(ow,GW-1),oph2(oh,fillH2),{fill:'#7c3aed'}));
+  // splash
+  if(pct>5&&pct<98){
+    const splashTick=Math.floor(dogStreamOff/2)%2;
+    if(splashTick===0){px(GX+GW/2-2,fillY2-2,'#c084fc');px(GX+GW/2+2,fillY2-2,'#c084fc');}
+    else{px(GX+GW/2-3,fillY2-1,'#c084fc');px(GX+GW/2+3,fillY2-1,'#c084fc');}
+  }
+  // mL label
+  og.appendChild(t(opx(ox,ow,100),opy(oy,oh,23),`${disp}`,{'font-size':7,fill:'#c084fc','font-weight':600}));
+  og.appendChild(t(opx(ox,ow,100),opy(oy,oh,33),'mL',{'font-size':6,fill:'#7c3aed'}));
+
+  // ── BOTTOM BAR ────────────────────────────────────────────────────
+  og.appendChild(r(opx(ox,ow,0),opy(oy,oh,59),opw(ow,127),oph2(oh,5),{fill:'#1a0a2e',rx:1}));
+  og.appendChild(r(opx(ox,ow,0),opy(oy,oh,59),opw(ow,pct*127/100),oph2(oh,5),{fill:'#7c3aed',rx:1}));
+}
+
+// Keep waveTimer var for stopWaveAnim compat
+let waveTimer=null;
+
 function updateMachineOLED(servIdx=-1,disp=0,tgt=0){
-  const og=document.getElementById('moled-content');if(!og)return;og.innerHTML='';
+  const og=document.getElementById('moled-content');if(!og)return;
   const ox=M.OLED_X+5,oy=M.OLED_Y+5,ow=M.OLED_W-10,oh=M.OLED_H-24;
-  if(!systemOn){og.appendChild(t(ox+ow/2,oy+oh/2-3,'SYSTEM',{'text-anchor':'middle','font-size':10,fill:'#7c3aed','font-weight':600}));og.appendChild(t(ox+ow/2,oy+oh/2+11,'OFF',{'text-anchor':'middle','font-size':10,fill:'#7c3aed','font-weight':600}));return;}
-  if(servIdx>=0){
-    og.appendChild(t(ox+ow/2,oy+9,`SERVING SLOT ${servIdx+1}`,{'text-anchor':'middle','font-size':6.5,fill:'#7c3aed'}));
-    og.appendChild(ln(ox,oy+13,ox+ow,oy+13,{stroke:'#4c1d95','stroke-width':.5}));
-    og.appendChild(t(ox+30,oy+38,`${disp}`,{'text-anchor':'middle','font-size':21,fill:'#c084fc','font-weight':600}));
-    og.appendChild(t(ox+55,oy+30,`/${tgt}`,{'font-size':7,fill:'#7c3aed'}));og.appendChild(t(ox+55,oy+40,'mL',{'font-size':7,fill:'#7c3aed'}));
-    const bw=Math.max(Math.round((disp/tgt)*(ow-4)),0);
-    og.appendChild(r(ox,oy+oh-9,ow,7,{rx:2,fill:'#1a0a2e',stroke:'#4c1d95','stroke-width':.5}));
-    og.appendChild(r(ox+1,oy+oh-8,bw,5,{rx:2,fill:'#7c3aed'}));
+
+  if(!systemOn){
+    stopWaveAnim();
+    og.innerHTML='';
+    og.appendChild(t(ox+ow/2,oy+oh/2-3,'SYSTEM',{'text-anchor':'middle','font-size':10,fill:'#7c3aed','font-weight':600}));
+    og.appendChild(t(ox+ow/2,oy+oh/2+11,'OFF',{'text-anchor':'middle','font-size':10,fill:'#7c3aed','font-weight':600}));
     return;
   }
+
+  if(servIdx>=0){
+    drawOLEDDog(og,ox,oy,ow,oh,servIdx,disp,tgt);
+    if(!dogAnimTimer) startDogAnim(og,ox,oy,ow,oh,servIdx,tgt);
+    return;
+  }
+
+  // Not serving — stop wave
+  stopWaveAnim();
+  og.innerHTML='';
+
   if(showStats){
     og.appendChild(r(ox,oy,ow,13,{rx:2,fill:'#1e1040'}));
     og.appendChild(t(ox+ow/2,oy+10,'SESSION STATS',{'text-anchor':'middle','font-size':6,fill:'#a78bfa'}));
-    og.appendChild(t(ox+4,oy+26,'Drinks:',{'font-size':6,fill:'#7c3aed'}));og.appendChild(t(ox+4,oy+40,drinkCount,{'font-size':14,fill:'#c084fc','font-weight':600}));
-    og.appendChild(t(ox+ow/2+4,oy+26,'Total mL:',{'font-size':6,fill:'#7c3aed'}));og.appendChild(t(ox+ow/2+4,oy+40,totalMl,{'font-size':14,fill:'#c084fc','font-weight':600}));
+    og.appendChild(t(ox+4,oy+26,'Drinks:',{'font-size':6,fill:'#7c3aed'}));
+    og.appendChild(t(ox+4,oy+40,drinkCount,{'font-size':14,fill:'#c084fc','font-weight':600}));
+    og.appendChild(t(ox+ow/2+4,oy+26,'Total mL:',{'font-size':6,fill:'#7c3aed'}));
+    og.appendChild(t(ox+ow/2+4,oy+40,totalMl,{'font-size':14,fill:'#c084fc','font-weight':600}));
     og.appendChild(t(ox+ow/2,oy+oh-2,'KEY: back',{'text-anchor':'middle','font-size':5.5,fill:'#534AB7'}));
     return;
   }
+
   og.appendChild(r(ox+2,oy+2,40,11,{rx:2,fill:'#1e1040'}));
   og.appendChild(t(ox+22,oy+11,modeA?'MANUAL':'AUTO',{'text-anchor':'middle','font-size':6,fill:'#a78bfa'}));
-  slots.forEach((s,i)=>{const dx=ox+52+i*11;og.appendChild(cc(dx,oy+7,3.5,{fill:s.full?'#f87171':s.present?'#4ade80':'none',stroke:s.full?'#f87171':s.present?'#4ade80':'#534AB7','stroke-width':1}));});
+  slots.forEach((s,i)=>{
+    const dx=ox+52+i*11;
+    og.appendChild(cc(dx,oy+7,3.5,{fill:s.full?'#f87171':s.present?'#4ade80':'none',stroke:s.full?'#f87171':s.present?'#4ade80':'#534AB7','stroke-width':1}));
+  });
   og.appendChild(t(ox+ow/2-8,oy+oh-13,`${volume}`,{'text-anchor':'middle','font-size':22,fill:'#c084fc','font-weight':600}));
   og.appendChild(t(ox+ow/2+16,oy+oh-15,'mL',{'font-size':8,fill:'#7c3aed'}));
   og.appendChild(t(ox+ow/2,oy+oh-2,'ENC:vol KEY:stats',{'text-anchor':'middle','font-size':5.5,fill:'#534AB7'}));
@@ -654,6 +810,7 @@ function updateEncKnob(){
 }
 
 function rotateEnc(delta){
+  resetActivity();
   encAngle=(encAngle+delta*18)%360;
   const oldVol=volume;
   volume=Math.max(10,Math.min(99,volume+delta));
@@ -663,6 +820,7 @@ function rotateEnc(delta){
 
 function encKeyPress(){
   if(!systemOn)return;
+  resetActivity();
   showStats=!showStats;
   log(showStats?'Stats screen':'Main screen');
   updateMachineOLED();
@@ -754,7 +912,7 @@ async function togglePower(){
   if(!systemOn){
     queue=[];
     slots.forEach((s,i)=>{s.fill=0;s.state=s.present?'present':'empty';});
-    updateMachineHose(-1,false);stopDrops();
+    updateMachineHose(-1,false);stopDrops();stopWaveAnim();
     log('System OFF','r');
     updateMachineAll();updateSlotBtns();
     return;
@@ -771,6 +929,7 @@ async function togglePower(){
 
 function longPressMode(){
   if(!systemOn)return;
+  resetActivity();
   modeA=!modeA;
   showStats=false;
   log('Mode: '+(modeA?'Manual':'Auto'),'b');
@@ -780,6 +939,7 @@ function longPressMode(){
 
 function manualServe(){
   if(!systemOn||!modeA)return;
+  resetActivity();
   slots.filter(s=>s.present&&!s.full&&s.state!=='serving'&&s.state!=='standby').forEach(s=>enq(s.id));
   processQ();
 }
@@ -795,6 +955,7 @@ function removeAll(){
 function placeGlass(i){
   if(!systemOn)return;
   if(slots[i].present)return;
+  resetActivity();
   slots[i].present=true;slots[i].full=false;slots[i].fill=0;
   if(serving){slots[i].state='standby';log(`Slot ${i+1} — standby`,'g');}
   else{slots[i].state='present';log(`Glass in slot ${i+1}`,'g');}
@@ -819,6 +980,7 @@ async function processQ(){
 
 async function serveSlot(idx){
   serving=true;
+  resetActivity();
   const s=slots[idx];
   s.state='serving';setMGlass(idx);
   log(`Servo → slot ${idx+1} (${ANGLES[idx]}°)`,'b');
@@ -828,17 +990,42 @@ async function serveSlot(idx){
   document.getElementById('st-status').textContent=`Serving slot ${idx+1}`;
   const dur=(volume/ML_S)*1000,tick=50;
   let elapsed=0,aborted=false;
+
+  // Solid blue on serving slot, solid green on all other present slots
+  for(let i=0;i<NUM;i++){
+    const nd=document.getElementById(`mneo-dot-${i}`);
+    const nr=document.getElementById(`mneo-ring-${i}`);
+    if(i===idx){
+      if(nd) nd.setAttribute('fill','#60a5fa');
+      if(nr) nr.setAttribute('stroke','#60a5fa');
+    } else if(slots[i].present){
+      if(nd) nd.setAttribute('fill','#4ade80');
+      if(nr) nr.setAttribute('stroke','#4ade80');
+    } else {
+      if(nd) nd.setAttribute('fill','#0a0a1a');
+      if(nr) nr.setAttribute('stroke','#1a1a3a');
+    }
+  }
+
   while(elapsed<dur){
     if(!s.present){aborted=true;break;}
     elapsed+=tick;
     const disp=Math.min(Math.round((elapsed/1000)*ML_S),volume);
     s.fill=Math.min(Math.round((disp/volume)*90),90);
-    setMGlass(idx);updateMachineOLED(idx,disp,volume);
+    setMGlass(idx);
+    updateMachineOLED(idx,disp,volume);
     await sleep(tick);
   }
-  stopDrops();updateMachineHose(idx,false);log('Pump OFF','b');
-  if(aborted){s.state='warning';setMGlass(idx);log(`Warning — glass removed slot ${idx+1}`,'o');await sleep(1200);}
-  else{
+
+  stopDrops();updateMachineHose(idx,false);stopWaveAnim();log('Pump OFF','b');
+
+  if(aborted){
+    s.state='warning';setMGlass(idx);
+    // ── Warning pulse animation ───────────────────────────────────
+    await warningPulse(idx);
+    log(`Warning — glass removed slot ${idx+1}`,'o');
+    await sleep(1200);
+  } else {
     s.full=true;s.state='full';s.fill=90;setMGlass(idx);
     drinkCount++;totalMl+=volume;
     document.getElementById('st-drinks').textContent=drinkCount;
@@ -849,6 +1036,27 @@ async function serveSlot(idx){
   serving=false;
   if(!modeA)slots.forEach((ss,i)=>{if(ss.state==='standby'&&!queue.includes(i)){ss.state='present';setMGlass(i);enq(i);}});
   updateSlotBtns();
+}
+
+async function warningPulse(slot){
+  const og=document.getElementById('moled-content');
+  if(!og) return;
+  const ox=M.OLED_X+5,oy=M.OLED_Y+5,ow=M.OLED_W-10,oh=M.OLED_H-24;
+  // Flash !!WARNING!! 3 times
+  for(let f=0;f<3;f++){
+    og.innerHTML='';
+    og.appendChild(t(ox+ow/2,oy+oh/2,'!!WARNING!!',{'text-anchor':'middle','font-size':10,fill:'#f87171','font-weight':700}));
+    await sleep(150);
+    og.innerHTML='';
+    await sleep(100);
+  }
+  // Show full warning screen
+  og.innerHTML='';
+  og.appendChild(t(ox+ow/2,oy+10,'!! WARNING !!',{'text-anchor':'middle','font-size':7,fill:'#f87171','font-weight':600}));
+  og.appendChild(ln(ox,oy+14,ox+ow,oy+14,{stroke:'#7f1d1d','stroke-width':.5}));
+  og.appendChild(t(ox+4,oy+24,'Glass removed!',{'font-size':7,fill:'#fca5a5'}));
+  og.appendChild(t(ox+4,oy+35,`Slot: ${slot+1}`,{'font-size':7,fill:'#fca5a5'}));
+  og.appendChild(t(ox+4,oy+46,'Serve aborted.',{'font-size':7,fill:'#fca5a5'}));
 }
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
@@ -1808,6 +2016,7 @@ function downloadCode(){
 // Code page lazy load — hooked into the existing showPage function below
 
 buildMachine();
+startSaverCheck();
 log('Dispenser ready — press Power ON');
 </script>
 </body>
