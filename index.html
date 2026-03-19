@@ -3,662 +3,1812 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Water Dispenser — Interactive Wiring</title>
+<title>Water Dispenser Simulator</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@600;900&display=swap');
-  * { margin:0; padding:0; box-sizing:border-box; }
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Orbitron:wght@700;900&display=swap');
 
-  body { background:#16213e; font-family:'JetBrains Mono',monospace; color:#e2e8f0; min-height:100vh; user-select:none; }
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0d1117; --panel:#0f1623; --card:#141d2b;
+  --border:#1e2d3d; --accent:#38bdf8; --text:#e2e8f0;
+  --muted:#4a5568; --green:#4ade80; --blue:#60a5fa;
+  --red:#f87171; --orange:#fb923c; --yellow:#facc15;
+  --purple:#a78bfa;
+}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;overflow-x:hidden;}
 
-  header {
-    background:linear-gradient(135deg,#0f0f23,#1a1a3e);
-    border-bottom:2px solid #2d3561;
-    padding:12px 20px;
-    display:flex; align-items:center; justify-content:space-between;
-  }
-  header h1 { font-family:'Orbitron',sans-serif; font-size:1rem; color:#60a5fa; letter-spacing:3px; text-shadow:0 0 20px rgba(96,165,250,.5); }
-  .hint { font-size:.62rem; color:#475569; letter-spacing:1px; }
-  .badge { background:rgba(96,165,250,.1); border:1px solid rgba(96,165,250,.3); border-radius:20px; padding:4px 12px; font-size:.6rem; color:#93c5fd; letter-spacing:2px; }
+/* NAV */
+nav{background:var(--panel);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:0;height:52px;}
+.nav-brand{font-family:'Orbitron',sans-serif;font-size:.85rem;color:var(--accent);letter-spacing:3px;margin-right:32px;white-space:nowrap;}
+.nav-tab{padding:0 18px;height:52px;display:flex;align-items:center;font-size:.65rem;letter-spacing:1px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;white-space:nowrap;}
+.nav-tab:hover{color:var(--text);}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
 
-  .wrap { display:grid; grid-template-columns:1fr 230px; height:calc(100vh - 52px); }
+/* PAGES */
+.page{display:none;padding:20px 24px;}
+.page.active{display:block;}
 
-  .board { overflow:auto; background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px); background-size:24px 24px; background-color:#0f1729; padding:16px; position:relative; }
+/* ── SIMULATOR ───────────────────────────────────────────── */
+.sim-layout{display:grid;grid-template-columns:1fr 280px;gap:16px;max-width:1200px;}
 
-  /* ── Wire interaction ── */
-  .wire { cursor:pointer; transition:opacity .15s; }
-  .wire path, .wire line, .wire polyline { pointer-events:stroke; stroke-linecap:round; stroke-linejoin:round; }
-  .wire:not(.active):not(.faded) { opacity:1; }
-  .wire.active path, .wire.active line { filter:drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor); stroke-width:4 !important; }
-  .wire.faded { opacity:.12; }
+.machine-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;overflow:hidden;}
 
-  /* Pin node pulse on active */
-  .pin-node { cursor:pointer; transition:r .15s; }
-  .pin-node.active { animation:pulse 1s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+/* Controls panel */
+.ctrl-panel{display:flex;flex-direction:column;gap:12px;}
+.ctrl-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;}
+.ctrl-title{font-size:.6rem;letter-spacing:2px;color:var(--accent);margin-bottom:12px;font-family:'Orbitron',sans-serif;}
 
-  /* ── Tooltip ── */
-  #tip {
-    position:fixed; pointer-events:none;
-    background:#0f1729; border:1px solid #334155;
-    border-radius:8px; padding:8px 12px;
-    font-size:.68rem; color:#e2e8f0; line-height:1.6;
-    box-shadow:0 8px 32px rgba(0,0,0,.6);
-    max-width:220px; z-index:999;
-    display:none;
-  }
-  #tip .tip-from { color:#94a3b8; font-size:.6rem; }
-  #tip .tip-to   { font-weight:600; }
-  #tip .tip-pin  { color:#60a5fa; font-size:.62rem; }
+/* Encoder knob */
+.encoder-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.encoder-outer{width:80px;height:80px;border-radius:50%;background:#1a2535;border:3px solid #2d3f55;position:relative;cursor:grab;user-select:none;}
+.encoder-outer:active{cursor:grabbing;}
+.encoder-inner{width:58px;height:58px;border-radius:50%;background:#111d2b;border:2px solid #243040;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);}
+.encoder-notch{width:4px;height:18px;background:var(--accent);border-radius:2px;position:absolute;top:6px;left:50%;transform:translateX(-50%);transition:transform .05s;}
+.encoder-label{font-size:.6rem;color:var(--muted);}
+.encoder-val{font-size:1.4rem;font-weight:600;color:var(--accent);}
+.encoder-unit{font-size:.6rem;color:var(--muted);}
+.encoder-btn-hint{font-size:.58rem;color:var(--muted);text-align:center;}
 
-  /* ── Sidebar ── */
-  .sidebar { background:#0a0d14; border-left:1px solid #1e2535; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:6px; }
-  .s-title { font-family:'Orbitron',sans-serif; font-size:.58rem; letter-spacing:2px; color:#60a5fa; border-bottom:1px solid #1e2535; padding-bottom:5px; margin-bottom:4px; }
+/* Real buttons */
+.btn-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
+.real-btn-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.real-btn-label{font-size:.58rem;color:var(--muted);text-align:center;max-width:70px;line-height:1.4;}
+.real-btn{border:none;outline:none;cursor:pointer;border-radius:50%;position:relative;transition:transform .08s;}
+.real-btn:active{transform:scale(.92);}
+.real-btn.power{width:56px;height:56px;background:#7f1d1d;box-shadow:0 4px 0 #450a0a,0 0 0 4px #1c0707;}
+.real-btn.power.on{background:#166534;box-shadow:0 4px 0 #14532d,0 0 0 4px #052e16,0 0 16px #4ade8066;}
+.real-btn.mode{width:46px;height:46px;background:#1e3a8a;box-shadow:0 4px 0 #1e3a5f,0 0 0 4px #0a1929;}
+.real-btn.serve{width:46px;height:46px;background:#374151;box-shadow:0 4px 0 #1f2937,0 0 0 4px #111827;}
+.real-btn.serve.disabled-look{opacity:.4;}
+.btn-inner{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.power-ring{width:20px;height:20px;border-radius:50%;border:3px solid rgba(255,255,255,.5);border-top-color:transparent;position:relative;}
+.power-ring::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateY(-6px);width:3px;height:9px;background:rgba(255,255,255,.5);border-radius:2px;}
 
-  .conn-row {
-    display:grid; grid-template-columns:10px 1fr auto;
-    align-items:center; gap:6px; padding:4px 5px;
-    border-radius:4px; cursor:pointer;
-    font-size:.6rem; border:1px solid transparent;
-    transition:background .1s, border-color .1s;
-  }
-  .conn-row:hover { background:rgba(255,255,255,.04); }
-  .conn-row.active { background:rgba(96,165,250,.08); border-color:rgba(96,165,250,.25); }
-  .conn-dot { width:9px; height:9px; border-radius:50%; }
-  .conn-from { color:#94a3b8; }
-  .conn-to   { color:#475569; font-size:.56rem; }
+/* Stats */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat{background:var(--card);border-radius:8px;padding:10px 12px;}
+.stat-lbl{font-size:.58rem;color:var(--muted);margin-bottom:3px;}
+.stat-val{font-size:1.1rem;font-weight:600;color:var(--text);}
 
-  .s-gap { height:8px; border-top:1px solid #1e2535; margin-top:2px; }
+/* Log */
+.log-box{background:#070d14;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.62rem;max-height:100px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;}
+.log-row{display:flex;gap:8px;}
+.log-t{color:#2d4a6a;flex-shrink:0;}
+.log-m{color:var(--text);}
+.log-m.g{color:#4ade80;}.log-m.b{color:#60a5fa;}.log-m.r{color:#f87171;}.log-m.o{color:#fb923c;}
 
-  .note { border-radius:6px; padding:9px; font-size:.58rem; line-height:1.8; margin-top:4px; }
-  .note.warn { background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.2); color:#fca5a5; }
-  .note.info { background:rgba(96,165,250,.05); border:1px solid rgba(96,165,250,.15); color:#93c5fd; }
-  .note b { display:block; margin-bottom:2px; }
-  .note.warn b { color:#ef4444; }
-  .note.info b { color:#60a5fa; }
-
-  svg { display:block; }
+/* ── WIRING DIAGRAM ───────────────────────────────────────── */
+.wire-layout{display:grid;grid-template-columns:1fr 220px;gap:0;height:calc(100vh - 112px);}
+.wire-board{overflow:auto;background-image:linear-gradient(rgba(255,255,255,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.015) 1px,transparent 1px);background-size:24px 24px;background-color:#0a0f18;padding:16px;}
+.wire-sidebar{background:#0a0d14;border-left:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:4px;}
+.ws-title{font-family:'Orbitron',sans-serif;font-size:.55rem;letter-spacing:2px;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:6px;}
+.cr{display:grid;grid-template-columns:9px 1fr auto;align-items:center;gap:5px;padding:4px;border-radius:4px;cursor:pointer;font-size:.58rem;border:1px solid transparent;}
+.cr:hover{background:rgba(255,255,255,.03);}
+.cr.active{background:rgba(56,189,248,.08);border-color:rgba(56,189,248,.2);}
+.cd{width:8px;height:8px;border-radius:50%;}
+.cf{color:#94a3b8;}.ct{color:#334155;font-size:.54rem;}
+.sgap{height:5px;border-top:1px solid var(--border);margin-top:2px;}
+.wnote{border-radius:6px;padding:8px;font-size:.56rem;line-height:1.8;margin-top:4px;}
+.wnote.warn{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.18);color:#fca5a5;}
+.wnote.info{background:rgba(56,189,248,.04);border:1px solid rgba(56,189,248,.12);color:#93c5fd;}
+.wnote b{display:block;margin-bottom:2px;}
+.wnote.warn b{color:#ef4444;}.wnote.info b{color:var(--accent);}
+.wire-el{cursor:pointer;}
+.wire-el path,.wire-el line{pointer-events:stroke;stroke-linecap:round;stroke-linejoin:round;}
+.wire-el.active path,.wire-el.active line{stroke-width:4!important;filter:drop-shadow(0 0 4px currentColor);}
+.wire-el.faded{opacity:.08;}
+.pn{cursor:pointer;}
+.pn.active{animation:ppulse 1s infinite;}
+@keyframes ppulse{0%,100%{opacity:1}50%{opacity:.35}}
+#wtip{position:fixed;pointer-events:none;background:#070d14;border:1px solid #1e2d3d;border-radius:8px;padding:7px 11px;font-size:.65rem;color:var(--text);line-height:1.7;max-width:210px;z-index:9999;display:none;}
+#wtip .wt-from{color:#4a5568;font-size:.58rem;}
+#wtip .wt-label{font-weight:600;color:#fff;}
+#wtip .wt-to{color:var(--accent);font-size:.58rem;}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>INTERACTIVE WIRING DIAGRAM</h1>
-  <span class="hint">CLICK ANY WIRE OR PIN TO HIGHLIGHT</span>
-  <div class="badge">ARDUINO UNO + MINI L298N</div>
-</header>
+<nav>
+  <div class="nav-brand">DISPENSER</div>
+  <div class="nav-tab active" onclick="showPage('sim',this)">Simulator</div>
+  <div class="nav-tab" onclick="showPage('wiring',this)">Wiring Diagram</div>
+  <div class="nav-tab" onclick="showPage('about',this)">How It Works</div>
+  <div class="nav-tab" onclick="showPage('code',this)">Final Code</div>
+</nav>
 
-<div id="tip"></div>
+<div id="wtip"><div class="wt-from" id="wt-from"></div><div class="wt-label" id="wt-label"></div><div class="wt-to" id="wt-to"></div></div>
 
-<div class="wrap">
-<div class="board">
-<svg id="svg" viewBox="0 0 1020 820" xmlns="http://www.w3.org/2000/svg" style="min-width:880px;width:100%;height:auto">
-<defs>
-  <filter id="glow"><feGaussianBlur stdDeviation="1.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  <filter id="shadow"><feDropShadow dx="1" dy="3" stdDeviation="5" flood-color="#000" flood-opacity=".6"/></filter>
-  <filter id="pcb-sh"><feDropShadow dx="2" dy="4" stdDeviation="7" flood-color="#000" flood-opacity=".7"/></filter>
+<!-- ══ SIMULATOR PAGE ════════════════════════════════════════════════ -->
+<div class="page active" id="page-sim">
+<div class="sim-layout">
 
-  <!-- Highlighted arrow markers (white/bright) -->
-  <marker id="ah-w" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="M0,0.5 L6,3.5 L0,6.5Z" fill="white"/></marker>
+  <!-- Machine canvas -->
+  <div>
+    <div class="machine-wrap">
+      <svg id="msv" viewBox="0 0 660 480" width="100%" style="display:block;"></svg>
+    </div>
+  </div>
 
-  <!-- Normal markers per color -->
-  <marker id="am-red"    markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#ef4444"/></marker>
-  <marker id="am-gnd"    markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#78716c"/></marker>
-  <marker id="am-purple" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#a78bfa"/></marker>
-  <marker id="am-violet" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#c084fc"/></marker>
-  <marker id="am-orange" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#f97316"/></marker>
-  <marker id="am-amber"  markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#fb923c"/></marker>
-  <marker id="am-green"  markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#4ade80"/></marker>
-  <marker id="am-lime"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#22c55e"/></marker>
-  <marker id="am-mint"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#86efac"/></marker>
-  <marker id="am-yellow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#facc15"/></marker>
-  <marker id="am-sky"    markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#38bdf8"/></marker>
-  <marker id="am-blue"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#7dd3fc"/></marker>
-  <marker id="am-pink"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#f472b6"/></marker>
-  <marker id="am-teal"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#34d399"/></marker>
-  <marker id="am-cyan"   markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#22d3ee"/></marker>
-  <marker id="am-indigo" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,.5 L5,3 L0,5.5Z" fill="#818cf8"/></marker>
-</defs>
+  <!-- Right controls -->
+  <div class="ctrl-panel">
 
-<!-- ══════════════ ARDUINO UNO ══════════════ -->
-<g filter="url(#pcb-sh)">
-  <rect x="360" y="210" width="240" height="320" rx="10" fill="#1a6b3c"/>
-  <rect x="365" y="215" width="230" height="310" rx="8" fill="#1d7a45"/>
-  <text x="480" y="236" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="9" fill="#86efac" letter-spacing="2" font-weight="700">ARDUINO UNO</text>
-  <!-- ATmega -->
-  <rect x="415" y="310" width="90" height="70" rx="3" fill="#111"/>
-  <text x="460" y="344" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#374151">ATmega328P</text>
-  <!-- chip legs -->
-  <g fill="#6b7280"><rect x="413" y="318" width="4" height="4" rx=".5"/><rect x="413" y="328" width="4" height="4" rx=".5"/><rect x="413" y="338" width="4" height="4" rx=".5"/><rect x="413" y="348" width="4" height="4" rx=".5"/><rect x="413" y="358" width="4" height="4" rx=".5"/><rect x="505" y="318" width="4" height="4" rx=".5"/><rect x="505" y="328" width="4" height="4" rx=".5"/><rect x="505" y="338" width="4" height="4" rx=".5"/><rect x="505" y="348" width="4" height="4" rx=".5"/><rect x="505" y="358" width="4" height="4" rx=".5"/></g>
-  <!-- Crystal -->
-  <rect x="460" y="296" width="20" height="10" rx="2" fill="#c0a000" stroke="#fbbf24" stroke-width=".5"/>
-  <text x="470" y="304" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="5" fill="#111">16MHz</text>
-  <!-- USB -->
-  <rect x="368" y="502" width="40" height="22" rx="3" fill="#2d3748" stroke="#4a5568" stroke-width="1"/>
-  <text x="388" y="516" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#718096">USB</text>
-  <!-- Reset -->
-  <rect x="556" y="292" width="14" height="14" rx="2" fill="#dc2626"/>
-  <text x="563" y="303" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="5" fill="white">RST</text>
+    <!-- Encoder -->
+    <div class="ctrl-card">
+      <div class="ctrl-title">ROTARY ENCODER</div>
+      <div class="encoder-wrap">
+        <div style="position:relative;">
+          <div class="encoder-outer" id="enc-outer" onwheel="onEncWheel(event)" onmousedown="startEncDrag(event)" ontouchstart="startEncTouch(event)">
+            <div class="encoder-inner"></div>
+            <div class="encoder-notch" id="enc-notch"></div>
+          </div>
+        </div>
+        <div class="encoder-val"><span id="enc-vol">50</span> <span class="encoder-unit">mL</span></div>
+        <div class="encoder-label">Turn to adjust volume</div>
+        <button onclick="encKeyPress()" style="margin-top:4px;background:#1a2535;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 14px;font-size:.62rem;cursor:pointer;font-family:inherit;">Press KEY — stats</button>
+        <div class="encoder-btn-hint">KY-040 encoder · CLK=D2 · DT=D3 · SW=D8</div>
+      </div>
+    </div>
 
-  <!-- RIGHT pin header bar -->
-  <rect x="596" y="268" width="10" height="230" rx="2" fill="#2d3748" stroke="#4a5568" stroke-width=".5"/>
-  <!-- D2–D12 pin circles + labels -->
-  <circle id="p-D2"  cx="601" cy="280" r="5" fill="#2d3748" stroke="#a78bfa" stroke-width="2" class="pin-node" data-net="clk"/>
-  <text x="591" y="284" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D2</text>
-  <circle id="p-D3"  cx="601" cy="298" r="5" fill="#2d3748" stroke="#c084fc" stroke-width="2" class="pin-node" data-net="dio"/>
-  <text x="591" y="302" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D3</text>
-  <circle id="p-D4"  cx="601" cy="316" r="5" fill="#2d3748" stroke="#f97316" stroke-width="2" class="pin-node" data-net="btn1"/>
-  <text x="591" y="320" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D4</text>
-  <circle id="p-D5"  cx="601" cy="334" r="5" fill="#2d3748" stroke="#fb923c" stroke-width="2" class="pin-node" data-net="btn2"/>
-  <text x="591" y="338" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D5</text>
-  <circle id="p-D6"  cx="601" cy="352" r="5" fill="#2d3748" stroke="#4ade80" stroke-width="2" class="pin-node" data-net="s1"/>
-  <text x="591" y="356" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D6</text>
-  <circle id="p-D7"  cx="601" cy="370" r="5" fill="#2d3748" stroke="#22c55e" stroke-width="2" class="pin-node" data-net="s2"/>
-  <text x="591" y="374" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D7</text>
-  <circle id="p-D8"  cx="601" cy="388" r="5" fill="#2d3748" stroke="#86efac" stroke-width="2" class="pin-node" data-net="key"/>
-  <text x="591" y="392" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D8</text>
-  <circle id="p-D9"  cx="601" cy="406" r="5" fill="#2d3748" stroke="#facc15" stroke-width="2" class="pin-node" data-net="servo"/>
-  <text x="591" y="410" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D9</text>
-  <circle id="p-D10" cx="601" cy="424" r="5" fill="#2d3748" stroke="#38bdf8" stroke-width="2" class="pin-node" data-net="in1"/>
-  <text x="591" y="428" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D10</text>
-  <circle id="p-D11" cx="601" cy="442" r="5" fill="#2d3748" stroke="#7dd3fc" stroke-width="2" class="pin-node" data-net="in2"/>
-  <text x="591" y="446" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D11</text>
-  <circle id="p-D12" cx="601" cy="460" r="5" fill="#2d3748" stroke="#f472b6" stroke-width="2" class="pin-node" data-net="neo"/>
-  <text x="591" y="464" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#cbd5e1">D12</text>
+    <!-- Buttons -->
+    <div class="ctrl-card">
+      <div class="ctrl-title">BUTTONS</div>
+      <div class="btn-row">
+        <div class="real-btn-wrap">
+          <div class="real-btn power" id="rbtn-power" onclick="togglePower()">
+            <div class="btn-inner"><div class="power-ring"></div></div>
+          </div>
+          <div class="real-btn-label">BTN1 Power ON/OFF</div>
+        </div>
+        <div class="real-btn-wrap">
+          <div class="real-btn mode" id="rbtn-mode" onclick="longPressMode()" title="Long press = toggle mode">
+            <div class="btn-inner"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2v4M9 12v4M2 9h4M12 9h4" stroke="rgba(255,255,255,.5)" stroke-width="2" stroke-linecap="round"/></svg></div>
+          </div>
+          <div class="real-btn-label">BTN2 long — Mode</div>
+        </div>
+        <div class="real-btn-wrap">
+          <div class="real-btn serve" id="rbtn-serve" onclick="manualServe()">
+            <div class="btn-inner"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 4v10M4 9l5 5 5-5" stroke="rgba(255,255,255,.4)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <div class="real-btn-label">BTN2 short — Serve</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <div id="sys-dot" style="width:8px;height:8px;border-radius:50%;background:#374151;transition:background .3s;"></div>
+        <span id="sys-lbl" style="font-size:.62rem;color:var(--muted);">System off</span>
+      </div>
+    </div>
 
-  <!-- LEFT pin header bar -->
-  <rect x="364" y="268" width="10" height="230" rx="2" fill="#2d3748" stroke="#4a5568" stroke-width=".5"/>
-  <circle id="p-5V"  cx="369" cy="280" r="5" fill="#2d3748" stroke="#ef4444" stroke-width="2" class="pin-node" data-net="5v"/>
-  <text x="379" y="284" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#ef4444">5V</text>
-  <circle id="p-GND1" cx="369" cy="298" r="5" fill="#2d3748" stroke="#78716c" stroke-width="2" class="pin-node" data-net="gnd"/>
-  <text x="379" y="302" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#78716c">GND</text>
-  <circle id="p-GND2" cx="369" cy="316" r="5" fill="#2d3748" stroke="#78716c" stroke-width="2" class="pin-node" data-net="gnd"/>
-  <text x="379" y="320" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#78716c">GND</text>
-  <!-- Analog -->
-  <circle id="p-A0" cx="369" cy="370" r="5" fill="#2d3748" stroke="#34d399" stroke-width="2" class="pin-node" data-net="sw1"/>
-  <text x="379" y="374" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#34d399">A0</text>
-  <circle id="p-A1" cx="369" cy="388" r="5" fill="#2d3748" stroke="#2dd4bf" stroke-width="2" class="pin-node" data-net="sw2"/>
-  <text x="379" y="392" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#2dd4bf">A1</text>
-  <circle id="p-A2" cx="369" cy="406" r="5" fill="#2d3748" stroke="#22d3ee" stroke-width="2" class="pin-node" data-net="sw3"/>
-  <text x="379" y="410" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#22d3ee">A2</text>
-  <circle id="p-A3" cx="369" cy="424" r="5" fill="#2d3748" stroke="#38bdf8" stroke-width="2" class="pin-node" data-net="sw4"/>
-  <text x="379" y="428" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#38bdf8">A3</text>
-  <circle id="p-A4" cx="369" cy="442" r="5" fill="#2d3748" stroke="#818cf8" stroke-width="2" class="pin-node" data-net="sw5"/>
-  <text x="379" y="446" font-family="JetBrains Mono,monospace" font-size="7.5" fill="#818cf8">A4</text>
-</g>
+    <!-- Glass placement -->
+    <div class="ctrl-card">
+      <div class="ctrl-title">GLASS SLOTS</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;" id="slot-btns"></div>
+      <div style="margin-top:8px;display:flex;gap:6px;justify-content:center;">
+        <button onclick="placeAll()" style="font-family:inherit;font-size:.6rem;padding:5px 12px;background:#1a2535;border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;">All glasses</button>
+        <button onclick="removeAll()" style="font-family:inherit;font-size:.6rem;padding:5px 12px;background:#1a0a0a;border:1px solid #3d1515;color:#f87171;border-radius:6px;cursor:pointer;">Remove all</button>
+      </div>
+      <div style="margin-top:8px;font-size:.58rem;color:var(--muted);text-align:center;">Click slot or use buttons · tap slot on diagram too</div>
+    </div>
 
-<!-- ══════════════ MINI L298N ══════════════ -->
-<g filter="url(#pcb-sh)">
-  <rect x="680" y="330" width="130" height="115" rx="6" fill="#cc0000"/>
-  <rect x="685" y="335" width="120" height="105" rx="4" fill="#b91c1c"/>
-  <circle cx="692" cy="342" r="3" fill="#7f1d1d"/><circle cx="802" cy="342" r="3" fill="#7f1d1d"/>
-  <circle cx="692" cy="437" r="3" fill="#7f1d1d"/><circle cx="802" cy="437" r="3" fill="#7f1d1d"/>
-  <!-- IC chip -->
-  <rect x="710" y="350" width="60" height="52" rx="2" fill="#111"/>
-  <text x="740" y="372" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#6b7280">L298N</text>
-  <text x="740" y="384" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">MINI</text>
-  <g fill="#9ca3af"><rect x="707" y="355" width="4" height="4" rx=".5"/><rect x="707" y="364" width="4" height="4" rx=".5"/><rect x="707" y="373" width="4" height="4" rx=".5"/><rect x="769" y="355" width="4" height="4" rx=".5"/><rect x="769" y="364" width="4" height="4" rx=".5"/><rect x="769" y="373" width="4" height="4" rx=".5"/></g>
-  <text x="745" y="343" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#fca5a5" letter-spacing="1">MINI L298N</text>
-  <!-- Screw terminals left: IN1, IN2, GND+VIN -->
-  <rect x="685" y="408" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
-  <rect x="685" y="424" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
-  <rect x="685" y="440" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
-  <circle id="p-IN1" cx="693" cy="414" r="3.5" fill="#374151" stroke="#38bdf8" stroke-width="1.5" class="pin-node" data-net="in1"/>
-  <circle id="p-IN2" cx="693" cy="430" r="3.5" fill="#374151" stroke="#7dd3fc" stroke-width="1.5" class="pin-node" data-net="in2"/>
-  <circle id="p-VIN" cx="693" cy="446" r="3.5" fill="#374151" stroke="#fbbf24" stroke-width="1.5" class="pin-node" data-net="psu2"/>
-  <text x="683" y="419" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7" fill="#38bdf8">IN1</text>
-  <text x="683" y="435" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7" fill="#7dd3fc">IN2</text>
-  <text x="683" y="451" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="7" fill="#fbbf24">VIN</text>
-  <!-- Screw terminals right: OUT+, OUT- -->
-  <rect x="799" y="408" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
-  <rect x="799" y="424" width="16" height="13" rx="1" fill="#78716c" stroke="#a8a29e" stroke-width=".5"/>
-  <circle id="p-OUT+" cx="807" cy="414" r="3.5" fill="#374151" stroke="#fb923c" stroke-width="1.5" class="pin-node" data-net="pump-pos"/>
-  <circle id="p-OUT-" cx="807" cy="430" r="3.5" fill="#374151" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="pump-neg"/>
-  <text x="817" y="419" font-family="JetBrains Mono,monospace" font-size="7" fill="#fb923c">OUT+</text>
-  <text x="817" y="435" font-family="JetBrains Mono,monospace" font-size="7" fill="#78716c">OUT-</text>
-</g>
+    <!-- Stats -->
+    <div class="ctrl-card">
+      <div class="ctrl-title">SESSION STATS</div>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-lbl">Drinks</div><div class="stat-val" id="st-drinks">0</div></div>
+        <div class="stat"><div class="stat-lbl">Total mL</div><div class="stat-val" id="st-ml">0</div></div>
+        <div class="stat" style="grid-column:span 2;"><div class="stat-lbl">Status</div><div class="stat-val" id="st-status" style="font-size:.9rem;">Off</div></div>
+      </div>
+    </div>
 
-<!-- ══════════════ SERVO ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="720" y="100" width="110" height="72" rx="5" fill="#2d3748"/>
-  <rect x="726" y="106" width="98" height="60" rx="3" fill="#1a202c"/>
-  <rect x="775" y="90" width="16" height="16" rx="2" fill="#e2e8f0"/>
-  <circle cx="783" cy="98" r="4" fill="#a0aec0"/>
-  <text x="770" y="140" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#a0aec0" letter-spacing="1">SERVO</text>
-  <text x="770" y="152" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">SG90 / MG995</text>
-  <circle id="p-SIG" cx="734" cy="172" r="4" fill="#854d0e" stroke="#facc15" stroke-width="1.5" class="pin-node" data-net="servo"/>
-  <circle id="p-SV"  cx="750" cy="172" r="4" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
-  <circle id="p-SG"  cx="766" cy="172" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <text x="734" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#facc15">SIG</text>
-  <text x="750" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#ef4444">5V</text>
-  <text x="766" y="184" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
-</g>
+    <!-- Log -->
+    <div class="ctrl-card" style="padding:10px;">
+      <div class="ctrl-title">SERIAL LOG</div>
+      <div class="log-box" id="log-box"></div>
+    </div>
 
-<!-- ══════════════ TM1637 ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="50" y="28" width="178" height="74" rx="6" fill="#130a2a"/>
-  <rect x="56" y="34" width="166" height="48" rx="3" fill="#0a001a"/>
-  <rect x="60" y="38" width="152" height="38" rx="2" fill="#060006" stroke="#4c1d95" stroke-width="1"/>
-  <text x="136" y="63" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="22" fill="#7c3aed" letter-spacing="5">A 10</text>
-  <text x="139" y="95" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#a78bfa" letter-spacing="2">TM1637</text>
-  <circle id="p-CLK" cx="82"  cy="108" r="4" fill="#7c3aed" stroke="#a78bfa" stroke-width="1.5" class="pin-node" data-net="clk"/>
-  <circle id="p-DIO" cx="104" cy="108" r="4" fill="#6d28d9" stroke="#c084fc" stroke-width="1.5" class="pin-node" data-net="dio"/>
-  <circle id="p-TV"  cx="126" cy="108" r="4" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
-  <circle id="p-TG"  cx="148" cy="108" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <text x="82"  y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#a78bfa">CLK</text>
-  <text x="104" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#c084fc">DIO</text>
-  <text x="126" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#ef4444">VCC</text>
-  <text x="148" y="120" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#78716c">GND</text>
-</g>
-
-<!-- ══════════════ NEOPIXEL ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="50" y="148" width="220" height="52" rx="5" fill="#0a0a1a" stroke="#db2777" stroke-width="1.5"/>
-  <rect x="58"  y="158" width="28" height="28" rx="3" fill="#831843"/><circle cx="72"  cy="172" r="8" fill="#f472b6" opacity=".9" filter="url(#glow)"/>
-  <rect x="96"  y="158" width="28" height="28" rx="3" fill="#1e3a5f"/><circle cx="110" cy="172" r="8" fill="#38bdf8" opacity=".9" filter="url(#glow)"/>
-  <rect x="134" y="158" width="28" height="28" rx="3" fill="#14532d"/><circle cx="148" cy="172" r="8" fill="#4ade80" opacity=".9" filter="url(#glow)"/>
-  <rect x="172" y="158" width="28" height="28" rx="3" fill="#78350f"/><circle cx="186" cy="172" r="8" fill="#fb923c" opacity=".9" filter="url(#glow)"/>
-  <rect x="210" y="158" width="28" height="28" rx="3" fill="#4c1d95"/><circle cx="224" cy="172" r="8" fill="#a78bfa" opacity=".9" filter="url(#glow)"/>
-  <text x="140" y="210" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#f472b6" letter-spacing="2">NEOPIXEL ×5</text>
-  <circle id="p-DIN" cx="80"  cy="216" r="4" fill="#db2777" stroke="#f472b6" stroke-width="1.5" class="pin-node" data-net="neo"/>
-  <circle id="p-NV"  cx="106" cy="216" r="4" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
-  <circle id="p-NG"  cx="132" cy="216" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <text x="80"  y="228" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#f472b6">DIN</text>
-  <text x="106" y="228" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#ef4444">5V</text>
-  <text x="132" y="228" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#78716c">GND</text>
-</g>
-
-<!-- ══════════════ BUTTONS ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="50" y="258" width="76" height="78" rx="6" fill="#1c0a00" stroke="#ea580c" stroke-width="1.5"/>
-  <text x="88" y="274" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#f97316" letter-spacing="1">BTN 1</text>
-  <text x="88" y="284" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">ON/OFF</text>
-  <circle cx="88" cy="305" r="14" fill="#7c2d12" stroke="#f97316" stroke-width="2.5"/>
-  <circle cx="88" cy="305" r="7" fill="#c2410c"/>
-  <circle id="p-B1G" cx="72" cy="328" r="3.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <circle id="p-B1S" cx="104" cy="328" r="3.5" fill="#7c2d12" stroke="#f97316" stroke-width="1.5" class="pin-node" data-net="btn1"/>
-  <text x="72"  y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
-  <text x="104" y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#f97316">D4</text>
-</g>
-<g filter="url(#shadow)">
-  <rect x="148" y="258" width="76" height="78" rx="6" fill="#1c0500" stroke="#c2410c" stroke-width="1.5"/>
-  <text x="186" y="274" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#fb923c" letter-spacing="1">BTN 2</text>
-  <text x="186" y="284" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4b5563">SERVE</text>
-  <circle cx="186" cy="305" r="14" fill="#7c2d12" stroke="#fb923c" stroke-width="2.5"/>
-  <circle cx="186" cy="305" r="7" fill="#c2410c"/>
-  <circle id="p-B2G" cx="170" cy="328" r="3.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <circle id="p-B2S" cx="202" cy="328" r="3.5" fill="#7c2d12" stroke="#fb923c" stroke-width="1.5" class="pin-node" data-net="btn2"/>
-  <text x="170" y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
-  <text x="202" y="340" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#fb923c">D5</text>
-</g>
-
-<!-- ══════════════ ENCODER ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="50" y="366" width="130" height="106" rx="6" fill="#001a08" stroke="#16a34a" stroke-width="1.5"/>
-  <text x="115" y="384" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#4ade80" letter-spacing="1">ENCODER</text>
-  <circle cx="115" cy="422" r="24" fill="#052e16" stroke="#16a34a" stroke-width="2.5"/>
-  <circle cx="115" cy="422" r="13" fill="#14532d" stroke="#4ade80" stroke-width="1.5"/>
-  <circle cx="115" cy="422" r="4" fill="#052e16"/>
-  <line x1="115" y1="410" x2="115" y2="417" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
-  <circle id="p-ES1" cx="63"  cy="458" r="3.5" fill="#14532d" stroke="#4ade80"  stroke-width="1.5" class="pin-node" data-net="s1"/>
-  <circle id="p-ES2" cx="80"  cy="458" r="3.5" fill="#14532d" stroke="#22c55e"  stroke-width="1.5" class="pin-node" data-net="s2"/>
-  <circle id="p-EK"  cx="97"  cy="458" r="3.5" fill="#14532d" stroke="#86efac"  stroke-width="1.5" class="pin-node" data-net="key"/>
-  <circle id="p-EV"  cx="114" cy="458" r="3.5" fill="#991b1b" stroke="#ef4444"  stroke-width="1.5" class="pin-node" data-net="5v"/>
-  <circle id="p-EG"  cx="131" cy="458" r="3.5" fill="#1e293b" stroke="#78716c"  stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <text x="63"  y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#4ade80">S1</text>
-  <text x="80"  y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#22c55e">S2</text>
-  <text x="97"  y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#86efac">KEY</text>
-  <text x="114" y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#ef4444">5V</text>
-  <text x="131" y="470" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
-</g>
-
-<!-- ══════════════ LIMIT SWITCHES ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="50" y="495" width="240" height="196" rx="6" fill="#001020" stroke="#0284c7" stroke-width="1.5"/>
-  <text x="170" y="513" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#38bdf8" letter-spacing="1">LIMIT SWITCHES</text>
-  <text x="170" y="525" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6.5" fill="#4b5563">5× — one per glass slot</text>
-  <!-- SW1 -->
-  <rect x="60" y="532" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
-  <rect x="76" y="537" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
-  <rect x="80" y="534" width="4" height="6" rx="1" fill="#60a5fa"/>
-  <text x="66" y="562" font-family="JetBrains Mono,monospace" font-size="6" fill="#34d399">SW1→A0</text>
-  <circle id="p-SW1S" cx="64"  cy="543" r="3" fill="#34d399" stroke="#34d399" stroke-width="1" class="pin-node" data-net="sw1"/>
-  <circle id="p-SW1G" cx="108" cy="543" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
-  <!-- SW2 -->
-  <rect x="130" y="532" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
-  <rect x="146" y="537" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
-  <rect x="150" y="534" width="4" height="6" rx="1" fill="#60a5fa"/>
-  <text x="136" y="562" font-family="JetBrains Mono,monospace" font-size="6" fill="#2dd4bf">SW2→A1</text>
-  <circle id="p-SW2S" cx="134" cy="543" r="3" fill="#2dd4bf" stroke="#2dd4bf" stroke-width="1" class="pin-node" data-net="sw2"/>
-  <circle id="p-SW2G" cx="178" cy="543" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
-  <!-- SW3 -->
-  <rect x="60" y="580" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
-  <rect x="76" y="585" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
-  <rect x="80" y="582" width="4" height="6" rx="1" fill="#60a5fa"/>
-  <text x="66" y="610" font-family="JetBrains Mono,monospace" font-size="6" fill="#22d3ee">SW3→A2</text>
-  <circle id="p-SW3S" cx="64"  cy="591" r="3" fill="#22d3ee" stroke="#22d3ee" stroke-width="1" class="pin-node" data-net="sw3"/>
-  <circle id="p-SW3G" cx="108" cy="591" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
-  <!-- SW4 -->
-  <rect x="130" y="580" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
-  <rect x="146" y="585" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
-  <rect x="150" y="582" width="4" height="6" rx="1" fill="#60a5fa"/>
-  <text x="136" y="610" font-family="JetBrains Mono,monospace" font-size="6" fill="#38bdf8">SW4→A3</text>
-  <circle id="p-SW4S" cx="134" cy="591" r="3" fill="#38bdf8" stroke="#38bdf8" stroke-width="1" class="pin-node" data-net="sw4"/>
-  <circle id="p-SW4G" cx="178" cy="591" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
-  <!-- SW5 -->
-  <rect x="95" y="628" width="52" height="22" rx="3" fill="#0c1e30" stroke="#0369a1" stroke-width="1"/>
-  <rect x="111" y="633" width="12" height="12" rx="1" fill="#1e40af" stroke="#3b82f6" stroke-width=".5"/>
-  <rect x="115" y="630" width="4" height="6" rx="1" fill="#60a5fa"/>
-  <text x="101" y="658" font-family="JetBrains Mono,monospace" font-size="6" fill="#818cf8">SW5→A4</text>
-  <circle id="p-SW5S" cx="99"  cy="639" r="3" fill="#818cf8" stroke="#818cf8" stroke-width="1" class="pin-node" data-net="sw5"/>
-  <circle id="p-SW5G" cx="143" cy="639" r="3" fill="#1e293b" stroke="#78716c" stroke-width="1" class="pin-node" data-net="gnd"/>
-</g>
-
-<!-- ══════════════ DC PUMP ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="720" y="580" width="130" height="100" rx="6" fill="#1a0800" stroke="#b45309" stroke-width="1.5"/>
-  <text x="785" y="598" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="8" fill="#fbbf24" letter-spacing="1">DC PUMP</text>
-  <ellipse cx="770" cy="645" rx="30" ry="26" fill="#0f0800" stroke="#92400e" stroke-width="2"/>
-  <ellipse cx="770" cy="645" rx="14" ry="14" fill="#1c1200" stroke="#b45309" stroke-width="1.5"/>
-  <ellipse cx="770" cy="645" rx="4"  ry="4"  fill="#92400e"/>
-  <circle id="p-PP" cx="820" cy="613" r="4" fill="#7c2d12" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="pump-pos"/>
-  <circle id="p-PN" cx="836" cy="613" r="4" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="pump-neg"/>
-  <text x="820" y="604" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#fb923c">+</text>
-  <text x="836" y="604" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">-</text>
-</g>
-
-<!-- ══════════════ POWER SUPPLIES ══════════════ -->
-<g filter="url(#shadow)">
-  <rect x="370" y="28" width="230" height="82" rx="7" fill="#1c0800" stroke="#ea580c" stroke-width="1.5"/>
-  <text x="485" y="47" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="9" fill="#fb923c" letter-spacing="2">POWER SUPPLIES</text>
-  <!-- PSU1 -->
-  <rect x="382" y="54" width="96" height="46" rx="4" fill="#0f0300" stroke="#c2410c" stroke-width="1"/>
-  <text x="430" y="68" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#f97316">PSU 1 — 5V</text>
-  <text x="430" y="79" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#7c2d12">Logic / Servo</text>
-  <circle id="p-P1+" cx="410" cy="92" r="4.5" fill="#991b1b" stroke="#ef4444" stroke-width="1.5" class="pin-node" data-net="5v"/>
-  <circle id="p-P1-" cx="430" cy="92" r="4.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <text x="410" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#ef4444">+5V</text>
-  <text x="430" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
-  <!-- PSU2 -->
-  <rect x="490" y="54" width="96" height="46" rx="4" fill="#0f0c00" stroke="#ca8a04" stroke-width="1"/>
-  <text x="538" y="68" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="#fbbf24">PSU 2 — 12V</text>
-  <text x="538" y="79" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#92400e">Motor/Pump</text>
-  <circle id="p-P2+" cx="518" cy="92" r="4.5" fill="#1a1500" stroke="#fbbf24" stroke-width="1.5" class="pin-node" data-net="psu2"/>
-  <circle id="p-P2-" cx="538" cy="92" r="4.5" fill="#1e293b" stroke="#78716c" stroke-width="1.5" class="pin-node" data-net="gnd"/>
-  <text x="518" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#fbbf24">+V</text>
-  <text x="538" y="104" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="6" fill="#78716c">GND</text>
-</g>
-
-<!-- ══════════════ GND RAIL ══════════════ -->
-<rect x="220" y="770" width="640" height="14" rx="4" fill="#1e293b" stroke="#475569" stroke-width="1.5"/>
-<text x="540" y="781" text-anchor="middle" font-family="Orbitron,sans-serif" font-size="7" fill="#64748b" letter-spacing="3">COMMON GROUND</text>
-
-<!-- ══════════════════════════════════════════════════════
-     WIRE GROUPS — each wrapped in <g class="wire" data-net="...">
-══════════════════════════════════════════════════════ -->
-
-<!-- 5V rail -->
-<g class="wire" data-net="5v" data-label="5V Power" data-from="PSU1 +5V" data-to="Arduino 5V / Servo / NeoPixel / Encoder">
-  <path d="M410,92 L410,140 L340,140 L340,280 L364,280" fill="none" stroke="#ef4444" stroke-width="2.2" marker-end="url(#am-red)"/>
-  <path d="M750,172 L750,190 L348,190 L348,280 L364,280" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
-  <path d="M106,216 L106,140 L410,140" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
-  <path d="M114,458 L114,280 L364,280" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
-  <path d="M126,108 L126,140 L410,140" fill="none" stroke="#ef4444" stroke-width="1.6" marker-end="url(#am-red)"/>
-</g>
-
-<!-- GND rail -->
-<g class="wire" data-net="gnd" data-label="Common Ground" data-from="All GNDs" data-to="Common Ground Rail">
-  <path d="M430,92 L430,770" fill="none" stroke="#78716c" stroke-width="1.6" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
-  <path d="M538,92 L538,770" fill="none" stroke="#78716c" stroke-width="1.6" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
-  <path d="M369,298 L308,298 L308,770 L220,770" fill="none" stroke="#78716c" stroke-width="1.8" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
-  <path d="M148,108 L148,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
-  <path d="M132,216 L132,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
-  <path d="M72,328 L72,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
-  <path d="M170,328 L170,774 L220,774" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
-  <path d="M131,470 L131,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
-  <path d="M766,172 L766,766 L860,766 L860,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#am-gnd)"/>
-  <path d="M108,543 L230,543 L230,770" fill="none" stroke="#78716c" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#am-gnd)"/>
-  <path d="M178,543 L234,543 L234,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
-  <path d="M108,591 L238,591 L238,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
-  <path d="M178,591 L242,591 L242,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
-  <path d="M143,639 L246,639 L246,770" fill="none" stroke="#78716c" stroke-width="1.2" stroke-dasharray="4,3"/>
-  <path d="M693,446 L660,446 L660,770" fill="none" stroke="#78716c" stroke-width="1.6" stroke-dasharray="6,3" marker-end="url(#am-gnd)"/>
-</g>
-
-<!-- PSU2 → L298N VIN -->
-<g class="wire" data-net="psu2" data-label="Motor Power" data-from="PSU2 +12V" data-to="Mini L298N VIN">
-  <path d="M518,92 L518,148 L658,148 L658,446 L685,446" fill="none" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#am-yellow)"/>
-</g>
-
-<!-- TM1637 CLK → D2 -->
-<g class="wire" data-net="clk" data-label="TM1637 Clock" data-from="TM1637 CLK" data-to="Arduino D2">
-  <path d="M82,108 L82,132 L636,132 L636,280 L606,280" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#am-purple)"/>
-</g>
-
-<!-- TM1637 DIO → D3 -->
-<g class="wire" data-net="dio" data-label="TM1637 Data" data-from="TM1637 DIO" data-to="Arduino D3">
-  <path d="M104,108 L104,137 L641,137 L641,298 L606,298" fill="none" stroke="#c084fc" stroke-width="2" marker-end="url(#am-violet)"/>
-</g>
-
-<!-- NeoPixel DIN → D12 -->
-<g class="wire" data-net="neo" data-label="NeoPixel Data" data-from="NeoPixel DIN" data-to="Arduino D12">
-  <path d="M80,216 L80,236 L648,236 L648,460 L606,460" fill="none" stroke="#f472b6" stroke-width="2" marker-end="url(#am-pink)"/>
-</g>
-
-<!-- BTN1 → D4 -->
-<g class="wire" data-net="btn1" data-label="Button 1" data-from="Button 1 signal" data-to="Arduino D4">
-  <path d="M104,328 L104,356 L652,356 L652,316 L606,316" fill="none" stroke="#f97316" stroke-width="2" marker-end="url(#am-orange)"/>
-</g>
-
-<!-- BTN2 → D5 -->
-<g class="wire" data-net="btn2" data-label="Button 2" data-from="Button 2 signal" data-to="Arduino D5">
-  <path d="M202,328 L202,362 L657,362 L657,334 L606,334" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#am-amber)"/>
-</g>
-
-<!-- Encoder S1 → D6 -->
-<g class="wire" data-net="s1" data-label="Encoder S1" data-from="Encoder S1" data-to="Arduino D6">
-  <path d="M63,458 L63,488 L662,488 L662,352 L606,352" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#am-green)"/>
-</g>
-
-<!-- Encoder S2 → D7 -->
-<g class="wire" data-net="s2" data-label="Encoder S2" data-from="Encoder S2" data-to="Arduino D7">
-  <path d="M80,458 L80,494 L667,494 L667,370 L606,370" fill="none" stroke="#22c55e" stroke-width="2" marker-end="url(#am-lime)"/>
-</g>
-
-<!-- Encoder KEY → D8 -->
-<g class="wire" data-net="key" data-label="Encoder KEY" data-from="Encoder KEY button" data-to="Arduino D8">
-  <path d="M97,458 L97,500 L672,500 L672,388 L606,388" fill="none" stroke="#86efac" stroke-width="2" marker-end="url(#am-mint)"/>
-</g>
-
-<!-- Servo SIG → D9 -->
-<g class="wire" data-net="servo" data-label="Servo Signal" data-from="Servo SIG (yellow)" data-to="Arduino D9">
-  <path d="M734,172 L734,196 L678,196 L678,406 L606,406" fill="none" stroke="#facc15" stroke-width="2.5" marker-end="url(#am-yellow)"/>
-</g>
-
-<!-- D10 → L298N IN1 -->
-<g class="wire" data-net="in1" data-label="Motor Control IN1" data-from="Arduino D10" data-to="Mini L298N IN1">
-  <path d="M606,424 L658,424 L658,414 L685,414" fill="none" stroke="#38bdf8" stroke-width="2.5" marker-end="url(#am-sky)"/>
-</g>
-
-<!-- D11 → L298N IN2 -->
-<g class="wire" data-net="in2" data-label="Motor Control IN2" data-from="Arduino D11" data-to="Mini L298N IN2">
-  <path d="M606,442 L661,442 L661,430 L685,430" fill="none" stroke="#7dd3fc" stroke-width="2.5" marker-end="url(#am-blue)"/>
-</g>
-
-<!-- L298N OUT+ → Pump+ -->
-<g class="wire" data-net="pump-pos" data-label="Pump Power +" data-from="L298N OUT+" data-to="DC Pump +">
-  <path d="M807,414 L858,414 L858,613 L824,613" fill="none" stroke="#fb923c" stroke-width="2.5" marker-end="url(#am-amber)"/>
-</g>
-
-<!-- L298N OUT- → Pump- -->
-<g class="wire" data-net="pump-neg" data-label="Pump Power −" data-from="L298N OUT−" data-to="DC Pump −">
-  <path d="M807,430 L862,430 L862,620 L840,620" fill="none" stroke="#78716c" stroke-width="1.8" marker-end="url(#am-gnd)"/>
-</g>
-
-<!-- Limit SW1 → A0 -->
-<g class="wire" data-net="sw1" data-label="Limit Switch 1" data-from="Limit SW1 signal" data-to="Arduino A0">
-  <path d="M64,543 L38,543 L38,370 L364,370" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#am-teal)"/>
-</g>
-
-<!-- Limit SW2 → A1 -->
-<g class="wire" data-net="sw2" data-label="Limit Switch 2" data-from="Limit SW2 signal" data-to="Arduino A1">
-  <path d="M134,543 L34,543 L34,388 L364,388" fill="none" stroke="#2dd4bf" stroke-width="2" marker-end="url(#am-teal)"/>
-</g>
-
-<!-- Limit SW3 → A2 -->
-<g class="wire" data-net="sw3" data-label="Limit Switch 3" data-from="Limit SW3 signal" data-to="Arduino A2">
-  <path d="M64,591 L30,591 L30,406 L364,406" fill="none" stroke="#22d3ee" stroke-width="2" marker-end="url(#am-cyan)"/>
-</g>
-
-<!-- Limit SW4 → A3 -->
-<g class="wire" data-net="sw4" data-label="Limit Switch 4" data-from="Limit SW4 signal" data-to="Arduino A3">
-  <path d="M134,591 L26,591 L26,424 L364,424" fill="none" stroke="#38bdf8" stroke-width="2" marker-end="url(#am-sky)"/>
-</g>
-
-<!-- Limit SW5 → A4 -->
-<g class="wire" data-net="sw5" data-label="Limit Switch 5" data-from="Limit SW5 signal" data-to="Arduino A4">
-  <path d="M99,639 L22,639 L22,442 L364,442" fill="none" stroke="#818cf8" stroke-width="2" marker-end="url(#am-indigo)"/>
-</g>
-
-</svg>
-</div><!-- end board -->
-
-<!-- SIDEBAR -->
-<div class="sidebar" id="sidebar">
-  <div class="s-title">CONNECTIONS — CLICK TO HIGHLIGHT</div>
-
-  <div class="conn-row" data-net="5v">       <div class="conn-dot" style="background:#ef4444"></div><span class="conn-from">5V Power</span>      <span class="conn-to">PSU1→All</span></div>
-  <div class="conn-row" data-net="gnd">      <div class="conn-dot" style="background:#78716c"></div><span class="conn-from">GND Rail</span>      <span class="conn-to">All→Rail</span></div>
-  <div class="conn-row" data-net="psu2">     <div class="conn-dot" style="background:#fbbf24"></div><span class="conn-from">Motor Power</span>   <span class="conn-to">PSU2→L298N</span></div>
-  <div class="s-gap"></div>
-  <div class="conn-row" data-net="clk">      <div class="conn-dot" style="background:#a78bfa"></div><span class="conn-from">TM1637 CLK</span>    <span class="conn-to">→ D2</span></div>
-  <div class="conn-row" data-net="dio">      <div class="conn-dot" style="background:#c084fc"></div><span class="conn-from">TM1637 DIO</span>    <span class="conn-to">→ D3</span></div>
-  <div class="conn-row" data-net="btn1">     <div class="conn-dot" style="background:#f97316"></div><span class="conn-from">Button 1</span>      <span class="conn-to">→ D4</span></div>
-  <div class="conn-row" data-net="btn2">     <div class="conn-dot" style="background:#fb923c"></div><span class="conn-from">Button 2</span>      <span class="conn-to">→ D5</span></div>
-  <div class="conn-row" data-net="s1">       <div class="conn-dot" style="background:#4ade80"></div><span class="conn-from">Encoder S1</span>    <span class="conn-to">→ D6</span></div>
-  <div class="conn-row" data-net="s2">       <div class="conn-dot" style="background:#22c55e"></div><span class="conn-from">Encoder S2</span>    <span class="conn-to">→ D7</span></div>
-  <div class="conn-row" data-net="key">      <div class="conn-dot" style="background:#86efac"></div><span class="conn-from">Encoder KEY</span>   <span class="conn-to">→ D8</span></div>
-  <div class="conn-row" data-net="servo">    <div class="conn-dot" style="background:#facc15"></div><span class="conn-from">Servo Signal</span>  <span class="conn-to">→ D9</span></div>
-  <div class="conn-row" data-net="in1">      <div class="conn-dot" style="background:#38bdf8"></div><span class="conn-from">L298N IN1</span>     <span class="conn-to">← D10</span></div>
-  <div class="conn-row" data-net="in2">      <div class="conn-dot" style="background:#7dd3fc"></div><span class="conn-from">L298N IN2</span>     <span class="conn-to">← D11</span></div>
-  <div class="conn-row" data-net="neo">      <div class="conn-dot" style="background:#f472b6"></div><span class="conn-from">NeoPixel DIN</span>  <span class="conn-to">→ D12</span></div>
-  <div class="s-gap"></div>
-  <div class="conn-row" data-net="sw1">      <div class="conn-dot" style="background:#34d399"></div><span class="conn-from">Limit SW 1</span>    <span class="conn-to">→ A0</span></div>
-  <div class="conn-row" data-net="sw2">      <div class="conn-dot" style="background:#2dd4bf"></div><span class="conn-from">Limit SW 2</span>    <span class="conn-to">→ A1</span></div>
-  <div class="conn-row" data-net="sw3">      <div class="conn-dot" style="background:#22d3ee"></div><span class="conn-from">Limit SW 3</span>    <span class="conn-to">→ A2</span></div>
-  <div class="conn-row" data-net="sw4">      <div class="conn-dot" style="background:#38bdf8"></div><span class="conn-from">Limit SW 4</span>    <span class="conn-to">→ A3</span></div>
-  <div class="conn-row" data-net="sw5">      <div class="conn-dot" style="background:#818cf8"></div><span class="conn-from">Limit SW 5</span>    <span class="conn-to">→ A4</span></div>
-  <div class="s-gap"></div>
-  <div class="conn-row" data-net="pump-pos"> <div class="conn-dot" style="background:#fb923c"></div><span class="conn-from">Pump +</span>        <span class="conn-to">OUT+</span></div>
-  <div class="conn-row" data-net="pump-neg"> <div class="conn-dot" style="background:#78716c"></div><span class="conn-from">Pump −</span>        <span class="conn-to">OUT−</span></div>
-
-  <div class="note warn"><b>⚠ TWO SUPPLIES</b>PSU1 (5V) → logic, servo, NeoPixels.<br>PSU2 (5–12V) → L298N VIN + pump.<br>All GNDs must share common ground.</div>
-  <div class="note info"><b>💡 MINI L298N</b>No ENA jumper. No separate logic pin. VIN, GND, IN1, IN2, OUT+, OUT− only.</div>
-  <div class="note info"><b>💡 BUTTONS</b>One leg → D4/D5. Other leg → GND. No resistor — uses INPUT_PULLUP.</div>
+  </div>
 </div>
-</div><!-- end wrap -->
+</div>
+
+<!-- ══ WIRING DIAGRAM PAGE ═══════════════════════════════════════════ -->
+<div class="page" id="page-wiring">
+<div class="wire-layout">
+  <div class="wire-board">
+    <svg id="wsv" viewBox="0 0 1020 820" xmlns="http://www.w3.org/2000/svg" style="min-width:860px;width:100%;height:auto;display:block;"></svg>
+  </div>
+  <div class="wire-sidebar" id="wire-sidebar">
+    <div class="ws-title">CLICK TO HIGHLIGHT</div>
+  </div>
+</div>
+</div>
+
+<!-- ══ HOW IT WORKS PAGE ═════════════════════════════════════════════ -->
+<div class="page" id="page-about">
+<div style="max-width:700px;margin:0 auto;display:flex;flex-direction:column;gap:20px;">
+  <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--accent);letter-spacing:2px;padding-top:8px;">HOW IT WORKS</div>
+
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:10px;">
+    <div style="font-size:.75rem;color:var(--accent);letter-spacing:1px;">POWER ON SEQUENCE</div>
+    <div style="font-size:.72rem;color:var(--text);line-height:1.8;">Press BTN1 → NeoPixel blue sweep → OLED splash screen → system ready. Nothing works until BTN1 is pressed.</div>
+  </div>
+
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;">
+    <div style="font-size:.75rem;color:var(--accent);letter-spacing:1px;margin-bottom:10px;">TWO MODES</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div style="background:var(--card);border-radius:8px;padding:12px;">
+        <div style="font-size:.68rem;color:var(--green);margin-bottom:6px;">MODE A — MANUAL</div>
+        <div style="font-size:.65rem;color:var(--text);line-height:1.8;">Place glass → LED green → press BTN2 → dispenser serves. All green-lit glasses are served in sequence.</div>
+      </div>
+      <div style="background:var(--card);border-radius:8px;padding:12px;">
+        <div style="font-size:.68rem;color:var(--blue);margin-bottom:6px;">MODE B — AUTO</div>
+        <div style="font-size:.65rem;color:var(--text);line-height:1.8;">Place glass → immediately starts serving. Extra glasses placed during serve go green (standby) and are served in queue order.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;">
+    <div style="font-size:.75rem;color:var(--accent);letter-spacing:1px;margin-bottom:10px;">SERVE SEQUENCE</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${['Glass placed → limit switch LOW → LED green','Serve triggered → servo rotates to slot angle (30°–180°)','Hose points at glass → pump ON','OLED shows live mL counter + progress bar','Pump OFF at target volume → servo home → LED red','Glass removed mid-serve → pump stops → LED orange (warning)'].map((s,i)=>`<div style="display:flex;align-items:center;gap:10px;"><div style="width:20px;height:20px;border-radius:50%;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.6rem;color:var(--accent);flex-shrink:0;">${i+1}</div><div style="font-size:.65rem;color:var(--text);line-height:1.6;">${s}</div></div>`).join('')}
+    </div>
+  </div>
+
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;">
+    <div style="font-size:.75rem;color:var(--accent);letter-spacing:1px;margin-bottom:10px;">LED COLORS</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+      ${[['#4ade80','Green','Glass present, ready to serve'],['#60a5fa','Blue','Dispensing water'],['#f87171','Red','Glass full / done'],['#fb923c','Orange','Warning — glass removed'],['Off','Gray','No glass in slot'],['Boot','Cyan sweep','Power-on animation']].map(([col,name,desc])=>`<div style="display:flex;align-items:center;gap:8px;background:var(--card);border-radius:6px;padding:8px 10px;"><div style="width:12px;height:12px;border-radius:50%;background:${col==='Off'?'#374151':col==='Boot'?'#22d3ee':col};flex-shrink:0;"></div><div><div style="font-size:.65rem;color:var(--text);">${name}</div><div style="font-size:.58rem;color:var(--muted);">${desc}</div></div></div>`).join('')}
+    </div>
+  </div>
+
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;">
+    <div style="font-size:.75rem;color:var(--accent);letter-spacing:1px;margin-bottom:8px;">VOLUME CALIBRATION</div>
+    <div style="font-size:.65rem;color:var(--text);line-height:1.9;">The code uses time-based volume estimation: <span style="color:var(--yellow);">pump_time = target_mL ÷ ML_PER_SECOND</span>. Default is 8.0 mL/s. To calibrate: run the pump for exactly 10 seconds, measure the water collected, divide by 10. Update <span style="color:var(--yellow);">ML_PER_SECOND</span> in the code with your measured value.</div>
+  </div>
+</div>
+</div>
+
+<!-- ══ CODE PAGE ══════════════════════════════════════════════════════ -->
+<div class="page" id="page-code">
+<div style="max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:16px;padding-bottom:40px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:8px;">
+    <div style="font-family:'Orbitron',sans-serif;font-size:1rem;color:var(--accent);letter-spacing:2px;">FINAL CODE</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="copyCode()" style="font-family:inherit;font-size:.65rem;padding:7px 16px;background:#0a1f0a;border:1px solid #16a34a;color:#4ade80;border-radius:6px;cursor:pointer;" id="copy-btn">Copy code</button>
+      <button onclick="downloadCode()" style="font-family:inherit;font-size:.65rem;padding:7px 16px;background:#0a1628;border:1px solid #1e3a5f;color:#60a5fa;border-radius:6px;cursor:pointer;">Download .ino</button>
+    </div>
+  </div>
+  <div style="background:#070d14;border:1px solid var(--border);border-radius:10px;padding:0;overflow:hidden;">
+    <div style="background:#0d1a2e;border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px;">
+      <div style="width:10px;height:10px;border-radius:50%;background:#f87171;"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:#fb923c;"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:#4ade80;"></div>
+      <span style="font-size:.65rem;color:var(--muted);margin-left:8px;">water_dispenser_merged.ino</span>
+    </div>
+    <pre id="code-block" style="padding:16px;font-size:.65rem;line-height:1.75;overflow-x:auto;color:#e2e8f0;white-space:pre;font-family:'JetBrains Mono',monospace;max-height:70vh;overflow-y:auto;"></pre>
+  </div>
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 16px;font-size:.62rem;color:var(--muted);line-height:1.8;">
+    <span style="color:var(--accent);">Libraries required:</span> Install via Arduino IDE → Tools → Manage Libraries<br>
+    <span style="color:#a78bfa;">Adafruit SSD1306</span> · <span style="color:#c084fc;">Adafruit GFX</span> · <span style="color:#f472b6;">Adafruit NeoPixel</span> · <span style="color:#facc15;">Servo</span> (built-in)<br>
+    <span style="color:var(--accent);">Board:</span> Arduino Nano · ATmega328P · Processor: Old Bootloader (if upload fails)
+  </div>
+</div>
+</div>
 
 <script>
-const tip = document.getElementById('tip');
-let activeNet = null;
+// ═══════════════════════════════════════════════════════════════════
+//  SHARED STATE
+// ═══════════════════════════════════════════════════════════════════
+const NS='http://www.w3.org/2000/svg';
+const NUM=5, ML_S=8;
+const ANGLES=[30,60,93,130,180];
+let systemOn=false,modeA=true,volume=50,serving=false,queue=[];
+let drinkCount=0,totalMl=0,showStats=false;
+let encAngle=0;
+let slots=Array.from({length:NUM},(_,i)=>({id:i,present:false,full:false,fill:0,state:'empty'}));
 
-// collect all wire groups and pin nodes by net
-const wires = [...document.querySelectorAll('.wire[data-net]')];
-const pins  = [...document.querySelectorAll('.pin-node[data-net]')];
-const rows  = [...document.querySelectorAll('.conn-row[data-net]')];
+// ═══════════════════════════════════════════════════════════════════
+//  PAGE NAV
+// ═══════════════════════════════════════════════════════════════════
+function showPage(id,tab){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  if(tab) tab.classList.add('active');
+  if(id==='wiring' && !wiringBuilt) buildWiring();
+  if(id==='code') loadCodePage();
+}
 
-function getNet(el) { return el.dataset.net; }
+// ═══════════════════════════════════════════════════════════════════
+//  SVG HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function e(tag,a={}){const el=document.createElementNS(NS,tag);Object.entries(a).forEach(([k,v])=>el.setAttribute(k,v));return el;}
+function t(x,y,s,a={}){const el=e('text',{x,y,...a});el.textContent=s;return el;}
+function r(x,y,w,h,a={}){return e('rect',{x,y,width:w,height:h,...a});}
+function cc(cx,cy,rad,a={}){return e('circle',{cx,cy,r:rad,...a});}
+function ln(x1,y1,x2,y2,a={}){return e('line',{x1,y1,x2,y2,...a});}
+function pa(d,a={}){return e('path',{d,fill:'none',...a});}
 
-function activate(net) {
-  if (activeNet === net) { deactivate(); return; }
-  activeNet = net;
+// ═══════════════════════════════════════════════════════════════════
+//  MACHINE SVG
+// ═══════════════════════════════════════════════════════════════════
+const MSVY={
+  NANO_X:10,NANO_Y:10,NANO_W:145,NANO_H:195,
+  OLED_X:165,OLED_Y:10,OLED_W:148,OLED_H:90,
+  L298_X:323,L298_Y:10,L298_W:88,L298_H:72,
+  ENC_X:421,ENC_Y:10,
+  SERVO_X:510,SERVO_Y:10,
+  PUMP_X:595,PUMP_Y:10,
+  NEO_Y:225,ARM_Y:252,
+  GLASS_Y:355,
+  SLOT_CXS:[45,130,215,300,385]
+};
+const M=MSVY;
 
-  // wires
-  wires.forEach(w => {
-    if (getNet(w) === net) { w.classList.add('active'); w.classList.remove('faded'); }
-    else { w.classList.add('faded'); w.classList.remove('active'); }
+function buildMachine(){
+  const sv=document.getElementById('msv');
+  sv.innerHTML='';
+  sv.appendChild(r(0,0,660,480,{rx:10,fill:'#0a0f18',stroke:'#1e2d3d','stroke-width':.5}));
+  drawMWires(sv);
+  drawMNano(sv);
+  drawMOLED(sv);
+  drawML298N(sv);
+  drawMEncoder(sv);
+  drawMServo(sv);
+  drawMPump(sv);
+  drawMNeoStrip(sv);
+  drawMArm(sv);
+  drawMGlasses(sv);
+  // Click zones
+  M.SLOT_CXS.forEach((cx,i)=>{
+    const z=r(cx-22,M.GLASS_Y-8,44,128,{fill:'transparent',cursor:'pointer'});
+    z.addEventListener('click',()=>placeGlass(i));
+    sv.appendChild(z);
   });
+  buildSlotButtons();
+  updateMachineAll();
+}
 
+function drawMNano(sv){
+  const g=e('g');
+  g.appendChild(r(M.NANO_X,M.NANO_Y,M.NANO_W,M.NANO_H,{rx:6,fill:'#1a4a8a',stroke:'#3b82f6','stroke-width':1.5}));
+  g.appendChild(r(M.NANO_X+22,M.NANO_Y+52,100,60,{rx:3,fill:'#0f0f0f'}));
+  g.appendChild(t(M.NANO_X+72,M.NANO_Y+84,'ATmega328P',{'text-anchor':'middle','font-size':6.5,fill:'#374151'}));
+  g.appendChild(t(M.NANO_X+72,M.NANO_Y+13,'ARDUINO NANO',{'text-anchor':'middle','font-size':7.5,fill:'#93c5fd','font-weight':600}));
+  g.appendChild(r(M.NANO_X+47,M.NANO_Y+M.NANO_H-22,52,16,{rx:3,fill:'#1e293b',stroke:'#4a5568','stroke-width':.5}));
+  g.appendChild(t(M.NANO_X+73,M.NANO_Y+M.NANO_H-11,'USB',{'text-anchor':'middle','font-size':6,fill:'#718096'}));
+  const rp=[['D2','#a78bfa'],['D3','#c084fc'],['D4','#f97316'],['D5','#fb923c'],['D6','#4ade80'],['D7','#22c55e'],['D8','#86efac'],['D9','#facc15'],['D10','#38bdf8'],['D11','#7dd3fc'],['D12','#f472b6']];
+  rp.forEach(([lbl,col],i)=>{const py=M.NANO_Y+24+i*15;g.appendChild(cc(M.NANO_X+M.NANO_W,py,3,{fill:'#1e293b',stroke:col,'stroke-width':1.5}));g.appendChild(t(M.NANO_X+M.NANO_W-5,py+3.5,lbl,{'text-anchor':'end','font-size':6,fill:'#cbd5e1'}));});
+  const lp=[['5V','#ef4444'],['GND','#78716c'],['A4','#a78bfa'],['A5','#c084fc'],['A0','#34d399'],['A1','#2dd4bf'],['A2','#22d3ee'],['A3','#38bdf8'],['A6','#818cf8']];
+  lp.forEach(([lbl,col],i)=>{const py=M.NANO_Y+24+i*15;g.appendChild(cc(M.NANO_X,py,3,{fill:'#1e293b',stroke:col,'stroke-width':1.5}));g.appendChild(t(M.NANO_X+5,py+3.5,lbl,{'font-size':6,fill:col}));});
+  sv.appendChild(g);
+}
+
+function drawMOLED(sv){
+  const g=e('g');
+  g.appendChild(r(M.OLED_X,M.OLED_Y,M.OLED_W,M.OLED_H,{rx:6,fill:'#1e0533',stroke:'#4c1d95','stroke-width':1.5}));
+  g.appendChild(r(M.OLED_X+5,M.OLED_Y+5,M.OLED_W-10,M.OLED_H-24,{rx:3,fill:'#060008',stroke:'#4c1d95','stroke-width':.5,id:'moled-screen'}));
+  ['GND','VCC','SCL','SDA'].forEach((p,i)=>{
+    const px=M.OLED_X+13+i*20;
+    g.appendChild(cc(px,M.OLED_Y+M.OLED_H-5,3,{fill:'#374151',stroke:['#78716c','#ef4444','#c084fc','#a78bfa'][i],'stroke-width':1.5}));
+    g.appendChild(t(px,M.OLED_Y+M.OLED_H+5,p,{'text-anchor':'middle','font-size':5.5,fill:'#94a3b8'}));
+  });
+  g.appendChild(t(M.OLED_X+M.OLED_W/2,M.OLED_Y+M.OLED_H-13,'SSD1306 OLED',{'text-anchor':'middle','font-size':6,fill:'#7c3aed'}));
+  sv.appendChild(g);
+  sv.appendChild(e('g',{id:'moled-content'}));
+}
+
+function drawML298N(sv){
+  const g=e('g');
+  g.appendChild(r(M.L298_X,M.L298_Y,M.L298_W,M.L298_H,{rx:5,fill:'#cc0000',stroke:'#991b1b','stroke-width':1.5}));
+  g.appendChild(r(M.L298_X+16,M.L298_Y+13,56,38,{rx:2,fill:'#111'}));
+  g.appendChild(t(M.L298_X+44,M.L298_Y+34,'L298N',{'text-anchor':'middle','font-size':7,fill:'#4b5563'}));
+  g.appendChild(t(M.L298_X+44,M.L298_Y+9,'MINI L298N',{'text-anchor':'middle','font-size':6,fill:'#fca5a5'}));
+  [['IN1','#38bdf8',32],['IN2','#7dd3fc',44],['VIN','#fbbf24',56]].forEach(([l,c,y])=>{g.appendChild(cc(M.L298_X,y,3,{fill:'#374151',stroke:c,'stroke-width':1.5}));g.appendChild(t(M.L298_X-4,y+3,l,{'text-anchor':'end','font-size':6,fill:c}));});
+  [['OUT+','#fb923c',32],['OUT-','#78716c',44]].forEach(([l,c,y])=>{g.appendChild(cc(M.L298_X+M.L298_W,y,3,{fill:'#374151',stroke:c,'stroke-width':1.5}));g.appendChild(t(M.L298_X+M.L298_W+4,y+3,l,{'font-size':6,fill:c}));});
+  sv.appendChild(g);
+}
+
+function drawMEncoder(sv){
+  const g=e('g');
+  const cx=M.ENC_X+30,cy=M.ENC_Y+30;
+  // PCB
+  g.appendChild(r(M.ENC_X,M.ENC_Y,60,90,{rx:5,fill:'#0a1f0a',stroke:'#16a34a','stroke-width':1.5}));
+  // outer knob ring
+  g.appendChild(cc(cx,cy,22,{fill:'#1a2a1a',stroke:'#22c55e','stroke-width':2}));
+  // knob body
+  g.appendChild(cc(cx,cy,17,{fill:'#111d11',stroke:'#4ade80','stroke-width':1.5,id:'menc-knob'}));
+  // knob grip lines
+  for(let i=0;i<8;i++){
+    const ang=(i/8)*Math.PI*2;
+    const x1=cx+Math.cos(ang)*13,y1=cy+Math.sin(ang)*13;
+    const x2=cx+Math.cos(ang)*17,y2=cy+Math.sin(ang)*17;
+    g.appendChild(ln(x1,y1,x2,y2,{stroke:'#1e3a1e','stroke-width':1.5}));
+  }
+  // indicator dot
+  g.appendChild(cc(cx,cy-11,2.5,{fill:'#4ade80',id:'menc-dot'}));
+  // shaft
+  g.appendChild(cc(cx,cy,4,{fill:'#2d4a2d',stroke:'#4ade80','stroke-width':1}));
   // pins
-  pins.forEach(p => {
-    if (getNet(p) === net) p.classList.add('active');
-    else p.classList.remove('active');
+  ['CLK','DT','SW','5V','GND'].forEach((p,i)=>{
+    const px=M.ENC_X+6+i*11;
+    g.appendChild(cc(px,M.ENC_Y+82,3,{fill:'#374151',stroke:['#a78bfa','#c084fc','#86efac','#ef4444','#78716c'][i],'stroke-width':1.5}));
+    g.appendChild(t(px,M.ENC_Y+92,p,{'text-anchor':'middle','font-size':5,fill:'#94a3b8'}));
   });
+  g.appendChild(t(cx,M.ENC_Y+74,'KY-040',{'text-anchor':'middle','font-size':6,fill:'#4ade80'}));
+  sv.appendChild(g);
+}
 
-  // sidebar rows
-  rows.forEach(r => {
-    if (getNet(r) === net) r.classList.add('active');
-    else r.classList.remove('active');
+function drawMServo(sv){
+  const sx=M.SERVO_X,sy=M.SERVO_Y;
+  const g=e('g');
+  g.appendChild(r(sx,sy,80,55,{rx:5,fill:'#1e293b',stroke:'#4a5568','stroke-width':1}));
+  g.appendChild(r(sx+8,sy+8,64,36,{rx:3,fill:'#0f172a'}));
+  // horn
+  g.appendChild(cc(sx+28,sy-1,9,{fill:'#e2e8f0',stroke:'#94a3b8','stroke-width':1.5,id:'mservo-horn'}));
+  g.appendChild(cc(sx+28,sy-1,3.5,{fill:'#94a3b8'}));
+  g.appendChild(t(sx+40,sy+34,'SERVO',{'text-anchor':'middle','font-size':7,fill:'#94a3b8'}));
+  [['S','#facc15',10],['V','#ef4444',22],['G','#78716c',34]].forEach(([l,c,ox])=>{g.appendChild(cc(sx+ox,sy+55,2.5,{fill:c}));});
+  sv.appendChild(g);
+  // Hose group
+  const hg=e('g',{id:'mhose-g'});
+  hg.appendChild(e('path',{id:'mhose1',fill:'none',stroke:'#4b5563','stroke-width':5,'stroke-linecap':'round'}));
+  hg.appendChild(e('path',{id:'mhose2',fill:'none',stroke:'#6b7280','stroke-width':2.5,'stroke-linecap':'round'}));
+  sv.appendChild(hg);
+}
+
+function drawMPump(sv){
+  const px=M.PUMP_X,py=M.PUMP_Y;
+  const g=e('g');
+  g.appendChild(r(px,py,58,58,{rx:6,fill:'#1a0800',stroke:'#b45309','stroke-width':1.5}));
+  g.appendChild(e('ellipse',{cx:px+28,cy:py+33,rx:20,ry:18,fill:'#0f0800',stroke:'#92400e','stroke-width':1.5}));
+  g.appendChild(e('ellipse',{cx:px+28,cy:py+33,rx:8,ry:8,fill:'#1c1200',stroke:'#b45309','stroke-width':1}));
+  g.appendChild(e('ellipse',{cx:px+28,cy:py+33,rx:3,ry:3,fill:'#92400e'}));
+  g.appendChild(t(px+28,py+9,'PUMP',{'text-anchor':'middle','font-size':6.5,fill:'#fbbf24'}));
+  g.appendChild(cc(px+52,py+16,3,{fill:'#7c2d12',stroke:'#ef4444','stroke-width':1.5}));
+  g.appendChild(cc(px+52,py+28,3,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5}));
+  sv.appendChild(g);
+}
+
+function drawMNeoStrip(sv){
+  const g=e('g',{id:'mneo-group'});
+  const NX=22,NY=M.NEO_Y,gap=78;
+  g.appendChild(r(NX-10,NY-6,gap*(NUM-1)+82,24,{rx:4,fill:'#0a0a1a',stroke:'#db2777','stroke-width':1}));
+  M.SLOT_CXS.forEach((cx,i)=>{
+    g.appendChild(r(cx-12,NY-3,22,18,{rx:3,fill:'#1a1a3a'}));
+    g.appendChild(cc(cx,NY+6,6,{fill:'#1a1a3a',stroke:'#222','stroke-width':1,id:`mneo-ring-${i}`}));
+    g.appendChild(cc(cx,NY+6,3.5,{fill:'#0a0a1a',id:`mneo-dot-${i}`}));
+  });
+  g.appendChild(t(NX+gap*(NUM-1)/2+3,NY+20,'NeoPixel ×5',{'text-anchor':'middle','font-size':7,fill:'#f472b6'}));
+  sv.appendChild(g);
+}
+
+function drawMArm(sv){
+  sv.appendChild(r(22,M.ARM_Y,430,6,{rx:3,fill:'#374151'}));
+  sv.appendChild(r(446,50,6,M.ARM_Y-44,{rx:3,fill:'#374151'}));
+  const sg=e('g',{id:'mspout-g',transform:'translate(-40,0)'});
+  sg.appendChild(r(-3,M.ARM_Y,6,26,{rx:3,fill:'#4b5563',id:'mspout-body'}));
+  sg.appendChild(r(-5,M.ARM_Y+22,10,5,{rx:2,fill:'#374151'}));
+  const wg=e('g',{id:'mwater-drops',opacity:0});
+  for(let d=0;d<5;d++){wg.appendChild(e('ellipse',{cx:0,cy:M.ARM_Y+32+d*16,rx:2.5,ry:3.5,fill:'#60a5fa',opacity:1-d*.15,id:`mdrop-${d}`}));}
+  sg.appendChild(wg);
+  sv.appendChild(sg);
+}
+
+function drawMGlasses(sv){
+  M.SLOT_CXS.forEach((cx,i)=>{
+    sv.appendChild(t(cx,M.GLASS_Y-3,`S${i+1}`,{'text-anchor':'middle','font-size':7,fill:'#4a5568',id:`mslotlbl-${i}`}));
+    const cid=`mgc-${i}`;
+    const cp=e('clipPath',{id:cid});
+    cp.appendChild(e('polygon',{points:`${cx-13},${M.GLASS_Y+5} ${cx+13},${M.GLASS_Y+5} ${cx+10},${M.GLASS_Y+92} ${cx-10},${M.GLASS_Y+92}`}));
+    sv.appendChild(cp);
+    sv.appendChild(e('polygon',{points:`${cx-13},${M.GLASS_Y+5} ${cx+13},${M.GLASS_Y+5} ${cx+10},${M.GLASS_Y+92} ${cx-10},${M.GLASS_Y+92}`,fill:'rgba(148,163,184,0.06)',stroke:'#64748b','stroke-width':1.5,id:`mgb-${i}`}));
+    sv.appendChild(r(cx-14,M.GLASS_Y+95,28,0,{fill:'#60a5fa',opacity:.8,'clip-path':`url(#${cid})`,id:`mwf-${i}`}));
+    sv.appendChild(t(cx,M.GLASS_Y+50,'tap',{'text-anchor':'middle','font-size':7.5,fill:'#334155',id:`mgh-${i}`}));
   });
 }
 
-function deactivate() {
-  activeNet = null;
-  wires.forEach(w => { w.classList.remove('active','faded'); });
-  pins.forEach(p => p.classList.remove('active'));
-  rows.forEach(r => r.classList.remove('active'));
-  tip.style.display = 'none';
+function drawMWires(sv){
+  const wg=e('g',{opacity:.6});
+  const W=(d,col,sw=1.3)=>pa(d,{stroke:col,'stroke-width':sw});
+  // OLED SDA/SCL
+  wg.appendChild(W(`M${M.OLED_X+73},${M.OLED_Y+M.OLED_H-5} L${M.OLED_X+73},${M.NANO_Y+84} L${M.NANO_X},${M.NANO_Y+84}`,'#a78bfa'));
+  wg.appendChild(W(`M${M.OLED_X+53},${M.OLED_Y+M.OLED_H-5} L${M.OLED_X+53},${M.NANO_Y+99} L${M.NANO_X},${M.NANO_Y+99}`,'#c084fc'));
+  // 5V
+  wg.appendChild(W(`M${M.NANO_X},${M.NANO_Y+24} L5,${M.NANO_Y+24} L5,5 L${M.OLED_X+13},5 L${M.OLED_X+13},${M.OLED_Y+M.OLED_H-5}`,'#ef4444'));
+  // D10/D11 → L298N
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24+8*15} L${M.L298_X},${M.NANO_Y+24+8*15} L${M.L298_X},32`,'#38bdf8'));
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24+9*15} L${M.L298_X+3},${M.NANO_Y+24+9*15} L${M.L298_X+3},44`,'#7dd3fc'));
+  // D9 → Servo
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24+7*15} L${M.SERVO_X+10},${M.NANO_Y+24+7*15} L${M.SERVO_X+10},${M.SERVO_Y+55}`,'#facc15'));
+  // L298N → Pump
+  wg.appendChild(W(`M${M.L298_X+M.L298_W},32 L${M.PUMP_X+52},32 L${M.PUMP_X+52},${M.PUMP_Y+16}`,'#fb923c'));
+  wg.appendChild(W(`M${M.L298_X+M.L298_W},44 L${M.PUMP_X+55},44 L${M.PUMP_X+55},${M.PUMP_Y+28}`,'#78716c'));
+  // D12 → NeoPixel
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24+10*15} L655,${M.NANO_Y+24+10*15} L655,${M.NEO_Y+6} L${M.SLOT_CXS[4]+68},${M.NEO_Y+6}`,'#f472b6'));
+  // Encoder D2/D3/D8
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24} L${M.ENC_X+6},${M.NANO_Y+24} L${M.ENC_X+6},${M.ENC_Y+82}`,'#a78bfa'));
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24+15} L${M.ENC_X+17},${M.NANO_Y+24+15} L${M.ENC_X+17},${M.ENC_Y+82}`,'#c084fc'));
+  wg.appendChild(W(`M${M.NANO_X+M.NANO_W},${M.NANO_Y+24+6*15} L${M.ENC_X+28},${M.NANO_Y+24+6*15} L${M.ENC_X+28},${M.ENC_Y+82}`,'#86efac'));
+  // Limit switches
+  M.SLOT_CXS.forEach((cx,i)=>{
+    wg.appendChild(W(`M${cx},${M.GLASS_Y+92} L${cx},470 L4,470 L4,${M.NANO_Y+120+i*15} L${M.NANO_X},${M.NANO_Y+120+i*15}`,['#34d399','#2dd4bf','#22d3ee','#38bdf8','#818cf8'][i],1));
+  });
+  sv.appendChild(wg);
 }
 
-// Wire click
-wires.forEach(w => {
-  w.addEventListener('click', e => {
-    e.stopPropagation();
-    const net = getNet(w);
-    activate(net);
-    // tooltip
-    tip.innerHTML = `<div class="tip-from">${w.dataset.from}</div>
-      <div class="tip-to">${w.dataset.label}</div>
-      <div class="tip-pin">${w.dataset.to}</div>`;
-    tip.style.display = 'block';
-  });
-  w.addEventListener('mousemove', e => {
-    if (activeNet === getNet(w)) {
-      tip.style.left = (e.clientX + 14) + 'px';
-      tip.style.top  = (e.clientY - 10) + 'px';
-    }
-  });
-});
+// ── MACHINE VISUAL UPDATES ───────────────────────────────────────────
+function setMNeo(i,col){
+  const nd=document.getElementById(`mneo-dot-${i}`);
+  const nr=document.getElementById(`mneo-ring-${i}`);
+  if(!nd||!nr)return;
+  const m={off:['#0a0a1a','#1a1a3a'],green:['#4ade80','#4ade80'],blue:['#60a5fa','#60a5fa'],red:['#f87171','#f87171'],orange:['#fb923c','#fb923c']};
+  const [df,rf]=m[col]||m.off;
+  nd.setAttribute('fill',df);nr.setAttribute('stroke',rf);
+}
 
-// Pin click
-pins.forEach(p => {
-  p.addEventListener('click', e => {
-    e.stopPropagation();
-    const net = getNet(p);
-    // find wire info
-    const wire = wires.find(w => getNet(w) === net);
-    activate(net);
-    if (wire) {
-      tip.innerHTML = `<div class="tip-from">${wire.dataset.from}</div>
-        <div class="tip-to">${wire.dataset.label}</div>
-        <div class="tip-pin">${wire.dataset.to}</div>`;
-      tip.style.left = (e.clientX + 14) + 'px';
-      tip.style.top  = (e.clientY - 10) + 'px';
-      tip.style.display = 'block';
-    }
-  });
-});
+function setMGlass(i){
+  const s=slots[i];
+  const gb=document.getElementById(`mgb-${i}`);
+  const wf=document.getElementById(`mwf-${i}`);
+  const gh=document.getElementById(`mgh-${i}`);
+  if(!gb)return;
+  if(!s.present){
+    gb.setAttribute('stroke','#64748b');gb.setAttribute('fill','rgba(148,163,184,0.06)');
+    if(wf){wf.setAttribute('height',0);wf.setAttribute('y',M.GLASS_Y+95);}
+    if(gh){gh.setAttribute('fill',systemOn?'#334155':'#1e293b');}
+    setMNeo(i,'off');return;
+  }
+  if(gh)gh.setAttribute('fill','transparent');
+  const sc={present:'#1D9E75',serving:'#378ADD',full:'#E24B4A',warning:'#EF9F27',standby:'#1D9E75'};
+  gb.setAttribute('stroke',sc[s.state]||'#64748b');
+  gb.setAttribute('fill',s.state==='serving'?'rgba(59,130,246,0.07)':'rgba(148,163,184,0.06)');
+  const maxH=84;const fillH=Math.round(maxH*(s.fill/100));
+  if(wf){wf.setAttribute('height',fillH);wf.setAttribute('y',M.GLASS_Y+92-fillH);wf.setAttribute('fill',s.state==='warning'?'#fb923c':'#60a5fa');}
+  const nm={present:'green',serving:'blue',full:'red',warning:'orange',standby:'green'};
+  setMNeo(i,nm[s.state]||'off');
+}
 
-// Sidebar row click
-rows.forEach(r => {
-  r.addEventListener('click', e => {
-    e.stopPropagation();
-    const net = getNet(r);
-    const wire = wires.find(w => getNet(w) === net);
-    activate(net);
-    if (wire) {
-      const rect = r.getBoundingClientRect();
-      tip.innerHTML = `<div class="tip-from">${wire.dataset.from}</div>
-        <div class="tip-to">${wire.dataset.label}</div>
-        <div class="tip-pin">${wire.dataset.to}</div>`;
-      tip.style.left = (rect.left - 240) + 'px';
-      tip.style.top  = (rect.top) + 'px';
-      tip.style.display = 'block';
-    }
-  });
-});
+function updateMachineOLED(servIdx=-1,disp=0,tgt=0){
+  const og=document.getElementById('moled-content');if(!og)return;og.innerHTML='';
+  const ox=M.OLED_X+5,oy=M.OLED_Y+5,ow=M.OLED_W-10,oh=M.OLED_H-24;
+  if(!systemOn){og.appendChild(t(ox+ow/2,oy+oh/2-3,'SYSTEM',{'text-anchor':'middle','font-size':10,fill:'#7c3aed','font-weight':600}));og.appendChild(t(ox+ow/2,oy+oh/2+11,'OFF',{'text-anchor':'middle','font-size':10,fill:'#7c3aed','font-weight':600}));return;}
+  if(servIdx>=0){
+    og.appendChild(t(ox+ow/2,oy+9,`SERVING SLOT ${servIdx+1}`,{'text-anchor':'middle','font-size':6.5,fill:'#7c3aed'}));
+    og.appendChild(ln(ox,oy+13,ox+ow,oy+13,{stroke:'#4c1d95','stroke-width':.5}));
+    og.appendChild(t(ox+30,oy+38,`${disp}`,{'text-anchor':'middle','font-size':21,fill:'#c084fc','font-weight':600}));
+    og.appendChild(t(ox+55,oy+30,`/${tgt}`,{'font-size':7,fill:'#7c3aed'}));og.appendChild(t(ox+55,oy+40,'mL',{'font-size':7,fill:'#7c3aed'}));
+    const bw=Math.max(Math.round((disp/tgt)*(ow-4)),0);
+    og.appendChild(r(ox,oy+oh-9,ow,7,{rx:2,fill:'#1a0a2e',stroke:'#4c1d95','stroke-width':.5}));
+    og.appendChild(r(ox+1,oy+oh-8,bw,5,{rx:2,fill:'#7c3aed'}));
+    return;
+  }
+  if(showStats){
+    og.appendChild(r(ox,oy,ow,13,{rx:2,fill:'#1e1040'}));
+    og.appendChild(t(ox+ow/2,oy+10,'SESSION STATS',{'text-anchor':'middle','font-size':6,fill:'#a78bfa'}));
+    og.appendChild(t(ox+4,oy+26,'Drinks:',{'font-size':6,fill:'#7c3aed'}));og.appendChild(t(ox+4,oy+40,drinkCount,{'font-size':14,fill:'#c084fc','font-weight':600}));
+    og.appendChild(t(ox+ow/2+4,oy+26,'Total mL:',{'font-size':6,fill:'#7c3aed'}));og.appendChild(t(ox+ow/2+4,oy+40,totalMl,{'font-size':14,fill:'#c084fc','font-weight':600}));
+    og.appendChild(t(ox+ow/2,oy+oh-2,'KEY: back',{'text-anchor':'middle','font-size':5.5,fill:'#534AB7'}));
+    return;
+  }
+  og.appendChild(r(ox+2,oy+2,40,11,{rx:2,fill:'#1e1040'}));
+  og.appendChild(t(ox+22,oy+11,modeA?'MANUAL':'AUTO',{'text-anchor':'middle','font-size':6,fill:'#a78bfa'}));
+  slots.forEach((s,i)=>{const dx=ox+52+i*11;og.appendChild(cc(dx,oy+7,3.5,{fill:s.full?'#f87171':s.present?'#4ade80':'none',stroke:s.full?'#f87171':s.present?'#4ade80':'#534AB7','stroke-width':1}));});
+  og.appendChild(t(ox+ow/2-8,oy+oh-13,`${volume}`,{'text-anchor':'middle','font-size':22,fill:'#c084fc','font-weight':600}));
+  og.appendChild(t(ox+ow/2+16,oy+oh-15,'mL',{'font-size':8,fill:'#7c3aed'}));
+  og.appendChild(t(ox+ow/2,oy+oh-2,'ENC:vol KEY:stats',{'text-anchor':'middle','font-size':5.5,fill:'#534AB7'}));
+}
 
-// Click background to deactivate
-document.getElementById('svg').addEventListener('click', deactivate);
+function updateMachineHose(slotIdx,flowOn){
+  const sg=document.getElementById('mspout-g');
+  const h1=document.getElementById('mhose1');
+  const h2=document.getElementById('mhose2');
+  const wd=document.getElementById('mwater-drops');
+  if(slotIdx<0){if(sg)sg.setAttribute('transform','translate(-40,0)');if(h1)h1.setAttribute('d','');if(h2)h2.setAttribute('d','');if(wd)wd.setAttribute('opacity',0);return;}
+  const cx=M.SLOT_CXS[slotIdx];
+  if(sg)sg.setAttribute('transform',`translate(${cx},0)`);
+  const hx=M.SERVO_X+28,hy=M.SERVO_Y-1;
+  const cp1x=hx+50,cp1y=hy+70;
+  const cp2x=cx-25,cp2y=M.ARM_Y-35;
+  const d=`M${hx},${hy} C${cp1x},${cp1y} ${cp2x},${cp2y} ${cx},${M.ARM_Y}`;
+  if(h1){h1.setAttribute('d',d);}if(h2){h2.setAttribute('d',d);}
+  if(wd)wd.setAttribute('opacity',flowOn?1:0);
+  if(flowOn)animDrops();
+}
+
+let dropTimer=null,dropOff=0;
+function animDrops(){
+  if(dropTimer)return;
+  dropTimer=setInterval(()=>{
+    dropOff=(dropOff+4)%80;
+    for(let d=0;d<5;d++){const el=document.getElementById(`mdrop-${d}`);if(el)el.setAttribute('cy',M.ARM_Y+30+(dropOff+d*16)%80);}
+  },40);
+}
+function stopDrops(){
+  if(dropTimer){clearInterval(dropTimer);dropTimer=null;}
+  const wd=document.getElementById('mwater-drops');if(wd)wd.setAttribute('opacity',0);
+}
+
+function updateMachineAll(){
+  slots.forEach((_,i)=>setMGlass(i));
+  updateMachineOLED();
+  updateEncKnob();
+  // power button color
+  const pb=document.getElementById('rbtn-power');
+  if(pb){pb.className='real-btn power'+(systemOn?' on':'');}
+  document.getElementById('sys-dot').style.background=systemOn?'#4ade80':'#374151';
+  document.getElementById('sys-lbl').textContent=systemOn?'System on':'System off';
+  document.getElementById('st-status').textContent=serving?'Serving...':(systemOn?'Ready':'Off');
+}
+
+// ─── ENCODER ────────────────────────────────────────────────────────
+function updateEncKnob(){
+  const notch=document.getElementById('enc-notch');
+  const mdot=document.getElementById('menc-dot');
+  if(notch)notch.style.transform=`translateX(-50%) rotate(${encAngle}deg)`;
+  if(mdot){
+    const rad=(encAngle-90)*Math.PI/180;
+    const cx=M.ENC_X+30,cy=M.ENC_Y+30;
+    mdot.setAttribute('cx',cx+Math.cos(rad)*11);
+    mdot.setAttribute('cy',cy+Math.sin(rad)*11);
+  }
+  document.getElementById('enc-vol').textContent=volume;
+}
+
+function rotateEnc(delta){
+  encAngle=(encAngle+delta*18)%360;
+  const oldVol=volume;
+  volume=Math.max(10,Math.min(99,volume+delta));
+  if(volume!==oldVol){log(`Volume: ${volume} mL`,'b');updateMachineOLED();document.getElementById('vslider')&&(document.getElementById('vslider').value=volume);}
+  updateEncKnob();
+}
+
+function encKeyPress(){
+  if(!systemOn)return;
+  showStats=!showStats;
+  log(showStats?'Stats screen':'Main screen');
+  updateMachineOLED();
+}
+
+function onEncWheel(ev){ev.preventDefault();rotateEnc(ev.deltaY>0?-1:1);}
+
+let encDragging=false,encLastY=0;
+function startEncDrag(ev){encDragging=true;encLastY=ev.clientY;document.addEventListener('mousemove',onEncDrag);document.addEventListener('mouseup',()=>{encDragging=false;document.removeEventListener('mousemove',onEncDrag);});}
+function onEncDrag(ev){if(!encDragging)return;const dy=encLastY-ev.clientY;if(Math.abs(dy)>4){rotateEnc(dy>0?1:-1);encLastY=ev.clientY;}}
+function startEncTouch(ev){const t=ev.touches[0];encLastY=t.clientY;document.addEventListener('touchmove',onEncTouch,{passive:false});document.addEventListener('touchend',()=>document.removeEventListener('touchmove',onEncTouch));}
+function onEncTouch(ev){ev.preventDefault();const t=ev.touches[0];const dy=encLastY-t.clientY;if(Math.abs(dy)>4){rotateEnc(dy>0?1:-1);encLastY=t.clientY;}}
+
+// ─── SLOT BUTTONS ────────────────────────────────────────────────────
+function buildSlotButtons(){
+  const wrap=document.getElementById('slot-btns');
+  wrap.innerHTML='';
+  slots.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.id=`sbtn-${i}`;
+    b.textContent=`Slot ${i+1}`;
+    b.style.cssText='font-family:inherit;font-size:.6rem;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;';
+    b.onclick=()=>placeGlass(i);
+    wrap.appendChild(b);
+  });
+}
+
+function updateSlotBtns(){
+  slots.forEach((s,i)=>{
+    const b=document.getElementById(`sbtn-${i}`);if(!b)return;
+    if(!s.present){b.style.background='var(--card)';b.style.color='var(--muted)';b.style.borderColor='var(--border)';}
+    else if(s.state==='full'){b.style.background='#1c0a0a';b.style.color='#f87171';b.style.borderColor='#7f1d1d';}
+    else if(s.state==='serving'){b.style.background='#0a1628';b.style.color='#60a5fa';b.style.borderColor='#1e3a5f';}
+    else{b.style.background='#0a1a0a';b.style.color='#4ade80';b.style.borderColor='#166534';}
+  });
+}
+
+// ─── BOOT ANIMATION ──────────────────────────────────────────────────
+async function bootAnimation(){
+  log('Boot animation...','b');
+  // OLED splash
+  const og=document.getElementById('moled-content');
+  if(og){
+    og.innerHTML='';
+    const ox=M.OLED_X+5,oy=M.OLED_Y+5,ow=M.OLED_W-10,oh=M.OLED_H-24;
+    // border
+    const brd=e('rect',{x:ox,y:oy,width:ow,height:oh,rx:2,fill:'none',stroke:'#7c3aed','stroke-width':1});
+    og.appendChild(brd);
+    // title
+    const tt=t(ox+ow/2,oy+16,'WATER DISPENSER',{'text-anchor':'middle','font-size':8,fill:'#a78bfa','font-weight':600});
+    og.appendChild(tt);
+    // divider
+    og.appendChild(ln(ox,oy+22,ox+ow,oy+22,{stroke:'#4c1d95','stroke-width':.5}));
+    // subtitle
+    og.appendChild(t(ox+ow/2,oy+34,'Arduino Nano',{'text-anchor':'middle','font-size':7,fill:'#7c3aed'}));
+    og.appendChild(t(ox+ow/2,oy+47,'Press BTN1 to ON',{'text-anchor':'middle','font-size':6.5,fill:'#534AB7'}));
+  }
+
+  // NeoPixel sweep — cyan-blue one by one, 80ms apart
+  const neoColors=['#0050c8','#0050c8','#0050c8','#0050c8','#0050c8'];
+  for(let i=0;i<NUM;i++){
+    const nd=document.getElementById(`mneo-dot-${i}`);
+    const nr=document.getElementById(`mneo-ring-${i}`);
+    if(nd) nd.setAttribute('fill','#00c8ff');
+    if(nr) nr.setAttribute('stroke','#00c8ff');
+    await sleep(80);
+  }
+  await sleep(300);
+  // All off
+  for(let i=0;i<NUM;i++){
+    const nd=document.getElementById(`mneo-dot-${i}`);
+    const nr=document.getElementById(`mneo-ring-${i}`);
+    if(nd) nd.setAttribute('fill','#0a0a1a');
+    if(nr) nr.setAttribute('stroke','#1a1a3a');
+  }
+
+  // Hold OLED splash 1.5s total (already shown during sweep, wait remainder)
+  await sleep(600);
+
+  // Clear OLED splash
+  if(og) og.innerHTML='';
+  log('Boot complete — system ready','g');
+  updateMachineOLED();
+}
+
+// ─── GAME LOGIC ──────────────────────────────────────────────────────
+async function togglePower(){
+  systemOn=!systemOn;
+  if(!systemOn){
+    queue=[];
+    slots.forEach((s,i)=>{s.fill=0;s.state=s.present?'present':'empty';});
+    updateMachineHose(-1,false);stopDrops();
+    log('System OFF','r');
+    updateMachineAll();updateSlotBtns();
+    return;
+  }
+  // Turning ON — disable button during boot
+  const pb=document.getElementById('rbtn-power');
+  if(pb) pb.style.pointerEvents='none';
+  log('System powering ON...','g');
+  updateMachineAll(); // show power LED on immediately
+  await bootAnimation();
+  if(pb) pb.style.pointerEvents='auto';
+  updateMachineAll();updateSlotBtns();
+}
+
+function longPressMode(){
+  if(!systemOn)return;
+  modeA=!modeA;
+  showStats=false;
+  log('Mode: '+(modeA?'Manual':'Auto'),'b');
+  updateMachineOLED();
+  if(!modeA){slots.filter(s=>s.present&&!s.full&&s.state!=='serving').forEach(s=>enq(s.id));processQ();}
+}
+
+function manualServe(){
+  if(!systemOn||!modeA)return;
+  slots.filter(s=>s.present&&!s.full&&s.state!=='serving'&&s.state!=='standby').forEach(s=>enq(s.id));
+  processQ();
+}
+
+function placeAll(){for(let i=0;i<NUM;i++)setTimeout(()=>placeGlass(i),i*150);}
+
+function removeAll(){
+  queue=[];
+  slots.forEach((s,i)=>{if(s.state!=='serving'){s.present=false;s.full=false;s.fill=0;s.state='empty';setMGlass(i);}});
+  updateMachineOLED();updateSlotBtns();log('Glasses removed');
+}
+
+function placeGlass(i){
+  if(!systemOn)return;
+  if(slots[i].present)return;
+  slots[i].present=true;slots[i].full=false;slots[i].fill=0;
+  if(serving){slots[i].state='standby';log(`Slot ${i+1} — standby`,'g');}
+  else{slots[i].state='present';log(`Glass in slot ${i+1}`,'g');}
+  setMGlass(i);updateMachineOLED();updateSlotBtns();
+  if(!modeA&&!serving){enq(i);processQ();}
+  else if(!modeA&&serving){enq(i);}
+}
+
+function enq(i){if(!queue.includes(i))queue.push(i);}
+
+async function processQ(){
+  if(serving)return;
+  while(queue.length>0){
+    const idx=queue.shift();
+    const s=slots[idx];
+    if(!s.present||s.full)continue;
+    await serveSlot(idx);
+  }
+  updateMachineHose(-1,false);stopDrops();updateMachineOLED();
+  document.getElementById('st-status').textContent='Ready';
+}
+
+async function serveSlot(idx){
+  serving=true;
+  const s=slots[idx];
+  s.state='serving';setMGlass(idx);
+  log(`Servo → slot ${idx+1} (${ANGLES[idx]}°)`,'b');
+  updateMachineHose(idx,false);await sleep(400);
+  updateMachineHose(idx,true);
+  log(`Pump ON — ${volume} mL`,'b');
+  document.getElementById('st-status').textContent=`Serving slot ${idx+1}`;
+  const dur=(volume/ML_S)*1000,tick=50;
+  let elapsed=0,aborted=false;
+  while(elapsed<dur){
+    if(!s.present){aborted=true;break;}
+    elapsed+=tick;
+    const disp=Math.min(Math.round((elapsed/1000)*ML_S),volume);
+    s.fill=Math.min(Math.round((disp/volume)*90),90);
+    setMGlass(idx);updateMachineOLED(idx,disp,volume);
+    await sleep(tick);
+  }
+  stopDrops();updateMachineHose(idx,false);log('Pump OFF','b');
+  if(aborted){s.state='warning';setMGlass(idx);log(`Warning — glass removed slot ${idx+1}`,'o');await sleep(1200);}
+  else{
+    s.full=true;s.state='full';s.fill=90;setMGlass(idx);
+    drinkCount++;totalMl+=volume;
+    document.getElementById('st-drinks').textContent=drinkCount;
+    document.getElementById('st-ml').textContent=totalMl+' mL';
+    log(`Slot ${idx+1} done — ${volume} mL served`,'g');
+    await sleep(300);
+  }
+  serving=false;
+  if(!modeA)slots.forEach((ss,i)=>{if(ss.state==='standby'&&!queue.includes(i)){ss.state='present';setMGlass(i);enq(i);}});
+  updateSlotBtns();
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function log(msg,col=''){
+  const el=document.getElementById('log-box');
+  const n=new Date();
+  const ts=`${n.getHours().toString().padStart(2,'0')}:${n.getMinutes().toString().padStart(2,'0')}:${n.getSeconds().toString().padStart(2,'0')}`;
+  const row=document.createElement('div');row.className='log-row';
+  row.innerHTML=`<span class="log-t">${ts}</span><span class="log-m ${col}">${msg}</span>`;
+  el.appendChild(row);el.scrollTop=el.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  WIRING DIAGRAM
+// ═══════════════════════════════════════════════════════════════════
+let wiringBuilt=false,wActiveNet=null;
+
+const WCONN=[
+  {net:'5v',  col:'#ef4444',from:'PSU1 +5V',label:'5V Power',to:'Nano 5V · Servo · NeoPixel · OLED'},
+  {net:'gnd', col:'#78716c',from:'All GNDs',label:'Common Ground',to:'Ground rail'},
+  {net:'psu2',col:'#fbbf24',from:'PSU2 +V',label:'Motor Power',to:'Mini L298N VIN'},
+  {net:'sda', col:'#a78bfa',from:'OLED SDA',label:'I2C Data (SDA)',to:'Nano A4'},
+  {net:'scl', col:'#c084fc',from:'OLED SCL',label:'I2C Clock (SCL)',to:'Nano A5'},
+  {net:'btn1',col:'#f97316',from:'Button 1',label:'BTN1 ON/OFF',to:'Nano D4'},
+  {net:'btn2',col:'#fb923c',from:'Button 2',label:'BTN2 Serve/Mode',to:'Nano D5'},
+  {net:'s1',  col:'#4ade80',from:'Encoder CLK',label:'Encoder S1 (CLK)',to:'Nano D2'},
+  {net:'s2',  col:'#22c55e',from:'Encoder DT',label:'Encoder S2 (DT)',to:'Nano D3'},
+  {net:'key', col:'#86efac',from:'Encoder SW',label:'Encoder KEY',to:'Nano D8'},
+  {net:'servo',col:'#facc15',from:'Servo SIG',label:'Servo Signal',to:'Nano D9'},
+  {net:'in1', col:'#38bdf8',from:'L298N IN1',label:'Motor IN1',to:'Nano D10'},
+  {net:'in2', col:'#7dd3fc',from:'L298N IN2',label:'Motor IN2',to:'Nano D11'},
+  {net:'neo', col:'#f472b6',from:'NeoPixel DIN',label:'NeoPixel Data',to:'Nano D12'},
+  {net:'sw1', col:'#34d399',from:'Limit SW1',label:'Limit Switch 1',to:'Nano A0'},
+  {net:'sw2', col:'#2dd4bf',from:'Limit SW2',label:'Limit Switch 2',to:'Nano A1'},
+  {net:'sw3', col:'#22d3ee',from:'Limit SW3',label:'Limit Switch 3',to:'Nano A2'},
+  {net:'sw4', col:'#38bdf8',from:'Limit SW4',label:'Limit Switch 4',to:'Nano A3'},
+  {net:'sw5', col:'#818cf8',from:'Limit SW5',label:'Limit Switch 5',to:'Nano A6'},
+  {net:'pp',  col:'#fb923c',from:'L298N OUT+',label:'Pump Power +',to:'DC Pump +'},
+  {net:'pn',  col:'#78716c',from:'L298N OUT−',label:'Pump Power −',to:'DC Pump −'},
+];
+
+function buildWiring(){
+  wiringBuilt=true;
+  const sv=document.getElementById('wsv');
+  sv.innerHTML='';
+  buildWiringComponents(sv);
+  buildWiringWires(sv);
+  buildWiringSidebar();
+}
+
+function buildWiringComponents(sv){
+  // Arduino Nano
+  const G=e('g');
+  G.appendChild(r(360,210,240,330,{rx:10,fill:'#1a4a8a',stroke:'#2563eb','stroke-width':2}));
+  G.appendChild(r(366,216,228,318,{rx:7,fill:'#1e5799'}));
+  G.appendChild(r(415,320,90,65,{rx:3,fill:'#111'}));
+  G.appendChild(t(480,354,'ATmega328P',{'text-anchor':'middle','font-size':7,fill:'#374151'}));
+  G.appendChild(t(480,238,'ARDUINO NANO',{'text-anchor':'middle','font-size':9,fill:'#93c5fd','font-weight':600,'letter-spacing':2}));
+  G.appendChild(r(435,517,70,20,{rx:3,fill:'#2d3748',stroke:'#4a5568','stroke-width':.5}));
+  G.appendChild(t(470,530,'USB',{'text-anchor':'middle','font-size':6,fill:'#718096'}));
+  // right pins D2-D12
+  const rp=[['D2','#a78bfa'],['D3','#c084fc'],['D4','#f97316'],['D5','#fb923c'],['D6','#4ade80'],['D7','#22c55e'],['D8','#86efac'],['D9','#facc15'],['D10','#38bdf8'],['D11','#7dd3fc'],['D12','#f472b6']];
+  rp.forEach(([l,c],i)=>{const py=270+i*18;G.appendChild(cc(601,py,4.5,{fill:'#1e293b',stroke:c,'stroke-width':2,class:'pn','data-net':['sda','scl','btn1','btn2','s1','s2','key','servo','in1','in2','neo'][i]}));G.appendChild(t(595,py+4,l,{'text-anchor':'end','font-size':7.5,fill:'#cbd5e1'}));});
+  // left pins
+  const lp=[['5V','#ef4444','5v'],['GND','#78716c','gnd'],['GND','#78716c','gnd'],['A0','#34d399','sw1'],['A1','#2dd4bf','sw2'],['A2','#22d3ee','sw3'],['A3','#38bdf8','sw4'],['A4','#a78bfa','sda'],['A5','#c084fc','scl'],['A6','#818cf8','sw5']];
+  lp.forEach(([l,c,n],i)=>{const py=270+i*18;G.appendChild(cc(369,py,4.5,{fill:'#1e293b',stroke:c,'stroke-width':2,class:'pn','data-net':n}));G.appendChild(t(377,py+4,l,{'font-size':7.5,fill:c}));});
+  sv.appendChild(G);
+
+  // OLED
+  const OG=e('g');
+  OG.appendChild(r(50,28,178,100,{rx:6,fill:'#1e0533',stroke:'#4c1d95','stroke-width':1.5}));
+  OG.appendChild(r(56,34,166,62,{rx:3,fill:'#060008',stroke:'#4c1d95','stroke-width':.5}));
+  OG.appendChild(t(139,103,'SSD1306 OLED 0.96"',{'text-anchor':'middle','font-size':7,fill:'#7c3aed'}));
+  OG.appendChild(t(80,60,'A 10',{'text-anchor':'middle','font-size':22,fill:'#7c3aed'}));
+  ['GND','VCC','SCL','SDA'].forEach((p,i)=>{const px=78+i*20;OG.appendChild(cc(px,130,4,{fill:'#374151',stroke:['#78716c','#ef4444','#c084fc','#a78bfa'][i],'stroke-width':1.5,class:'pn','data-net':['gnd','5v','scl','sda'][i]}));OG.appendChild(t(px,143,p,{'text-anchor':'middle','font-size':6.5,fill:'#94a3b8'}));});
+  sv.appendChild(OG);
+
+  // Encoder
+  const EG=e('g');
+  EG.appendChild(r(50,170,120,105,{rx:6,fill:'#0a1f0a',stroke:'#16a34a','stroke-width':1.5}));
+  EG.appendChild(t(110,185,'KY-040',{'text-anchor':'middle','font-size':8,fill:'#4ade80'}));
+  EG.appendChild(t(110,196,'ENCODER',{'text-anchor':'middle','font-size':7,fill:'#166534'}));
+  const ecx=110,ecy=238;
+  EG.appendChild(cc(ecx,ecy,24,{fill:'#1a2a1a',stroke:'#22c55e','stroke-width':2}));
+  EG.appendChild(cc(ecx,ecy,17,{fill:'#111d11',stroke:'#4ade80','stroke-width':1.5}));
+  for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2;EG.appendChild(ln(ecx+Math.cos(a)*13,ecy+Math.sin(a)*13,ecx+Math.cos(a)*17,ecy+Math.sin(a)*17,{stroke:'#1e3a1e','stroke-width':1.5}));}
+  EG.appendChild(cc(ecx,ecy-11,2.5,{fill:'#4ade80'}));
+  EG.appendChild(cc(ecx,ecy,4,{fill:'#2d4a2d',stroke:'#4ade80','stroke-width':1}));
+  [['CLK','#a78bfa','s1'],['DT','#c084fc','s2'],['SW','#86efac','key'],['5V','#ef4444','5v'],['GND','#78716c','gnd']].forEach(([l,c,n],i)=>{const px=66+i*14;EG.appendChild(cc(px,265,3.5,{fill:'#374151',stroke:c,'stroke-width':1.5,class:'pn','data-net':n}));EG.appendChild(t(px,276,l,{'text-anchor':'middle','font-size':6,fill:'#94a3b8'}));});
+  sv.appendChild(EG);
+
+  // Buttons
+  const BG=e('g');
+  // BTN1
+  BG.appendChild(r(50,300,62,65,{rx:6,fill:'#1c0a00',stroke:'#ea580c','stroke-width':1.5}));
+  BG.appendChild(t(81,316,'BTN 1',{'text-anchor':'middle','font-size':7,fill:'#f97316','letter-spacing':1}));
+  BG.appendChild(cc(81,344,13,{fill:'#7c2d12',stroke:'#f97316','stroke-width':2.5}));
+  BG.appendChild(cc(81,344,7,{fill:'#c2410c'}));
+  BG.appendChild(cc(81,357,3.5,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5,class:'pn','data-net':'gnd'}));
+  BG.appendChild(cc(108,357,3.5,{fill:'#7c2d12',stroke:'#f97316','stroke-width':1.5,class:'pn','data-net':'btn1'}));
+  BG.appendChild(t(81,368,'GND',{'text-anchor':'middle','font-size':6,fill:'#78716c'}));BG.appendChild(t(108,368,'D4',{'text-anchor':'middle','font-size':6,fill:'#f97316'}));
+  // BTN2
+  BG.appendChild(r(148,300,62,65,{rx:6,fill:'#1c0500',stroke:'#c2410c','stroke-width':1.5}));
+  BG.appendChild(t(179,316,'BTN 2',{'text-anchor':'middle','font-size':7,fill:'#fb923c','letter-spacing':1}));
+  BG.appendChild(cc(179,344,13,{fill:'#7c2d12',stroke:'#fb923c','stroke-width':2.5}));
+  BG.appendChild(cc(179,344,7,{fill:'#c2410c'}));
+  BG.appendChild(cc(163,357,3.5,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5,class:'pn','data-net':'gnd'}));
+  BG.appendChild(cc(195,357,3.5,{fill:'#7c2d12',stroke:'#fb923c','stroke-width':1.5,class:'pn','data-net':'btn2'}));
+  BG.appendChild(t(163,368,'GND',{'text-anchor':'middle','font-size':6,fill:'#78716c'}));BG.appendChild(t(195,368,'D5',{'text-anchor':'middle','font-size':6,fill:'#fb923c'}));
+  sv.appendChild(BG);
+
+  // Limit switches
+  const LG=e('g');
+  LG.appendChild(r(50,395,240,195,{rx:6,fill:'#001020',stroke:'#0284c7','stroke-width':1.5}));
+  LG.appendChild(t(170,413,'LIMIT SWITCHES ×5',{'text-anchor':'middle','font-size':8,fill:'#38bdf8','letter-spacing':1}));
+  [[0,'sw1','#34d399'],[1,'sw2','#2dd4bf'],[2,'sw3','#22d3ee'],[3,'sw4','#38bdf8'],[4,'sw5','#818cf8']].forEach(([i,n,c])=>{
+    const ry=428+i*30;
+    LG.appendChild(r(60,ry,140,22,{rx:3,fill:'#0c1e30',stroke:'#0369a1','stroke-width':.8}));
+    LG.appendChild(r(80,ry+5,24,12,{rx:1,fill:'#1e40af'}));
+    LG.appendChild(r(86,ry+2,8,6,{rx:1,fill:'#60a5fa'}));
+    LG.appendChild(t(66,ry+15,`SW${i+1}`,{'font-size':7,fill:c}));
+    LG.appendChild(cc(168,ry+11,3,{fill:'#374151',stroke:c,'stroke-width':1,class:'pn','data-net':n}));
+    LG.appendChild(cc(184,ry+11,3,{fill:'#1e293b',stroke:'#78716c','stroke-width':1,class:'pn','data-net':'gnd'}));
+  });
+  sv.appendChild(LG);
+
+  // Mini L298N
+  const MG=e('g');
+  MG.appendChild(r(660,270,130,115,{rx:6,fill:'#cc0000',stroke:'#991b1b','stroke-width':1.5}));
+  MG.appendChild(r(676,284,98,60,{rx:2,fill:'#111'}));
+  MG.appendChild(t(725,316,'L298N MINI',{'text-anchor':'middle','font-size':8,fill:'#6b7280'}));
+  MG.appendChild(t(725,280,'MINI L298N',{'text-anchor':'middle','font-size':7,fill:'#fca5a5'}));
+  [['IN1','#38bdf8','in1',332],['IN2','#7dd3fc','in2',350],['GND','#78716c','gnd',368],['VIN','#fbbf24','psu2',386]].forEach(([l,c,n,y])=>{MG.appendChild(cc(660,y,4,{fill:'#374151',stroke:c,'stroke-width':1.5,class:'pn','data-net':n}));MG.appendChild(t(656,y+4,l,{'text-anchor':'end','font-size':7,fill:c}));});
+  [['OUT+','#fb923c','pp',332],['OUT-','#78716c','pn',350]].forEach(([l,c,n,y])=>{MG.appendChild(cc(790,y,4,{fill:'#374151',stroke:c,'stroke-width':1.5,class:'pn','data-net':n}));MG.appendChild(t(794,y+4,l,{'font-size':7,fill:c}));});
+  sv.appendChild(MG);
+
+  // Servo
+  const SG=e('g');
+  SG.appendChild(r(660,100,110,72,{rx:5,fill:'#1e293b',stroke:'#4a5568','stroke-width':1.5}));
+  SG.appendChild(r(666,106,98,60,{rx:3,fill:'#0f172a'}));
+  SG.appendChild(cc(716,99,10,{fill:'#e2e8f0',stroke:'#94a3b8','stroke-width':1.5}));
+  SG.appendChild(cc(716,99,4,{fill:'#94a3b8'}));
+  SG.appendChild(t(715,142,'SERVO',{'text-anchor':'middle','font-size':8,fill:'#a0aec0','letter-spacing':1}));
+  SG.appendChild(cc(672,172,4,{fill:'#854d0e',stroke:'#facc15','stroke-width':1.5,class:'pn','data-net':'servo'}));
+  SG.appendChild(cc(688,172,4,{fill:'#991b1b',stroke:'#ef4444','stroke-width':1.5,class:'pn','data-net':'5v'}));
+  SG.appendChild(cc(704,172,4,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5,class:'pn','data-net':'gnd'}));
+  SG.appendChild(t(672,184,'SIG',{'text-anchor':'middle','font-size':6.5,fill:'#facc15'}));SG.appendChild(t(688,184,'5V',{'text-anchor':'middle','font-size':6.5,fill:'#ef4444'}));SG.appendChild(t(704,184,'GND',{'text-anchor':'middle','font-size':6.5,fill:'#78716c'}));
+  sv.appendChild(SG);
+
+  // Pump
+  const PG=e('g');
+  PG.appendChild(r(660,450,130,100,{rx:6,fill:'#1a0800',stroke:'#b45309','stroke-width':1.5}));
+  PG.appendChild(t(725,468,'DC PUMP',{'text-anchor':'middle','font-size':8,fill:'#fbbf24','letter-spacing':1}));
+  PG.appendChild(e('ellipse',{cx:710,cy:515,rx:30,ry:26,fill:'#0f0800',stroke:'#92400e','stroke-width':2}));
+  PG.appendChild(e('ellipse',{cx:710,cy:515,rx:13,ry:13,fill:'#1c1200',stroke:'#b45309','stroke-width':1.5}));
+  PG.appendChild(cc(710,515,4,{fill:'#92400e'}));
+  PG.appendChild(cc(755,463,4,{fill:'#7c2d12',stroke:'#ef4444','stroke-width':1.5,class:'pn','data-net':'pp'}));
+  PG.appendChild(cc(770,463,4,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5,class:'pn','data-net':'pn'}));
+  PG.appendChild(t(755,454,'+',{'text-anchor':'middle','font-size':9,fill:'#fb923c'}));PG.appendChild(t(770,454,'-',{'text-anchor':'middle','font-size':9,fill:'#78716c'}));
+  sv.appendChild(PG);
+
+  // Power supplies
+  const PSG=e('g');
+  PSG.appendChild(r(360,28,230,82,{rx:7,fill:'#1c0800',stroke:'#ea580c','stroke-width':1.5}));
+  PSG.appendChild(t(475,46,'POWER SUPPLIES',{'text-anchor':'middle','font-size':9,fill:'#fb923c','letter-spacing':2}));
+  PSG.appendChild(r(372,54,96,46,{rx:4,fill:'#0f0300',stroke:'#c2410c','stroke-width':1}));
+  PSG.appendChild(t(420,68,'PSU 1 — 5V',{'text-anchor':'middle','font-size':7,fill:'#f97316'}));PSG.appendChild(t(420,79,'Logic+Servo',{'text-anchor':'middle','font-size':6,fill:'#7c2d12'}));
+  PSG.appendChild(cc(398,92,4.5,{fill:'#991b1b',stroke:'#ef4444','stroke-width':1.5,class:'pn','data-net':'5v'}));PSG.appendChild(cc(418,92,4.5,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5,class:'pn','data-net':'gnd'}));
+  PSG.appendChild(r(482,54,96,46,{rx:4,fill:'#0f0c00',stroke:'#ca8a04','stroke-width':1}));
+  PSG.appendChild(t(530,68,'PSU 2 — 12V',{'text-anchor':'middle','font-size':7,fill:'#fbbf24'}));PSG.appendChild(t(530,79,'Motor/Pump',{'text-anchor':'middle','font-size':6,fill:'#92400e'}));
+  PSG.appendChild(cc(508,92,4.5,{fill:'#1a1500',stroke:'#fbbf24','stroke-width':1.5,class:'pn','data-net':'psu2'}));PSG.appendChild(cc(528,92,4.5,{fill:'#1e293b',stroke:'#78716c','stroke-width':1.5,class:'pn','data-net':'gnd'}));
+  sv.appendChild(PSG);
+
+  // GND Rail
+  sv.appendChild(r(210,775,580,14,{rx:4,fill:'#1e293b',stroke:'#475569','stroke-width':1.5}));
+  sv.appendChild(t(500,786,'COMMON GROUND',{'text-anchor':'middle','font-size':7,fill:'#64748b','letter-spacing':3}));
+}
+
+function buildWiringWires(sv){
+  const wires=[
+    {net:'5v',  d:'M398,92 L398,142 L330,142 L330,270 L364,270',col:'#ef4444',sw:2.2},
+    {net:'5v',  d:'M98,130 L98,142 L398,142',col:'#ef4444',sw:1.6},
+    {net:'5v',  d:'M106,130 L106,147 L330,147 L330,274',col:'#ef4444',sw:1.6},
+    {net:'5v',  d:'M688,172 L688,192 L338,192 L338,270 L364,270',col:'#ef4444',sw:1.6},
+    {net:'5v',  d:'M110,265 L110,292 L335,292 L335,270 L364,270',col:'#ef4444',sw:1.4},
+    {net:'gnd', d:'M418,92 L418,775',col:'#78716c',sw:1.6,'stroke-dasharray':'6,3'},
+    {net:'gnd', d:'M528,92 L528,775',col:'#78716c',sw:1.6,'stroke-dasharray':'6,3'},
+    {net:'gnd', d:'M369,288 L300,288 L300,775 L210,775',col:'#78716c',sw:1.8,'stroke-dasharray':'6,3'},
+    {net:'gnd', d:'M78,130 L78,775',col:'#78716c',sw:1.4,'stroke-dasharray':'5,3'},
+    {net:'gnd', d:'M704,172 L704,766 L840,766 L840,775',col:'#78716c',sw:1.4,'stroke-dasharray':'5,3'},
+    {net:'gnd', d:'M660,368 L630,368 L630,775',col:'#78716c',sw:1.6,'stroke-dasharray':'6,3'},
+    {net:'gnd', d:'M81,357 L81,790 L210,790',col:'#78716c',sw:1.4,'stroke-dasharray':'4,3'},
+    {net:'gnd', d:'M163,357 L163,794 L210,794',col:'#78716c',sw:1.4,'stroke-dasharray':'4,3'},
+    {net:'gnd', d:'M184,437 L208,437 L208,775',col:'#78716c',sw:1.2,'stroke-dasharray':'4,3'},
+    {net:'psu2',d:'M508,92 L508,150 L638,150 L638,368 L660,368',col:'#fbbf24',sw:2.5},
+    {net:'sda', d:'M138,130 L138,162 L342,162 L342,432 L364,432',col:'#a78bfa',sw:2.2},
+    {net:'scl', d:'M118,130 L118,156 L337,156 L337,450 L364,450',col:'#c084fc',sw:2.2},
+    {net:'btn1',d:'M108,357 L108,378 L632,378 L632,306 L601,306',col:'#f97316',sw:2},
+    {net:'btn2',d:'M195,357 L195,384 L636,384 L636,324 L601,324',col:'#fb923c',sw:2},
+    {net:'s1',  d:'M78,265 L78,300 L625,300 L625,270 L601,270',col:'#4ade80',sw:2},
+    {net:'s2',  d:'M92,265 L92,306 L628,306 L628,288 L601,288',col:'#22c55e',sw:2},
+    {net:'key', d:'M106,265 L106,312 L631,312 L631,360 L601,360',col:'#86efac',sw:2},
+    {net:'servo',d:'M672,172 L672,198 L642,198 L642,378 L601,378',col:'#facc15',sw:2.5},
+    {net:'in1', d:'M601,414 L636,414 L636,332 L660,332',col:'#38bdf8',sw:2.5},
+    {net:'in2', d:'M601,432 L633,432 L633,350 L660,350',col:'#7dd3fc',sw:2.5},
+    {net:'neo', d:'M601,468 L820,468 L820,138 L500,138 L500,56 L418,56',col:'#f472b6',sw:2},
+    {net:'pp',  d:'M790,332 L840,332 L840,463 L774,463',col:'#fb923c',sw:2.5},
+    {net:'pn',  d:'M790,350 L844,350 L844,470 L774,470',col:'#78716c',sw:1.8},
+    {net:'sw1', d:'M168,437 L192,437 L192,270 L364,270',col:'#34d399',sw:2},
+    {net:'sw2', d:'M168,467 L196,467 L196,288 L364,288',col:'#2dd4bf',sw:2},
+    {net:'sw3', d:'M168,497 L200,497 L200,306 L364,306',col:'#22d3ee',sw:2},
+    {net:'sw4', d:'M168,527 L204,527 L204,324 L364,324',col:'#38bdf8',sw:2},
+    {net:'sw5', d:'M168,557 L208,557 L208,432 L364,432',col:'#818cf8',sw:2},
+  ];
+
+  wires.forEach(w=>{
+    const g=e('g',{class:'wire-el','data-net':w.net});
+    const attrs={stroke:w.col,'stroke-width':w.sw||1.5};
+    if(w['stroke-dasharray'])attrs['stroke-dasharray']=w['stroke-dasharray'];
+    g.appendChild(pa(w.d,attrs));
+    g.addEventListener('click',ev=>{ev.stopPropagation();wActivate(w.net,g);showWTip(w,ev.clientX,ev.clientY);});
+    g.addEventListener('mousemove',ev=>{if(wActiveNet===w.net){const tip=document.getElementById('wtip');if(tip){tip.style.left=(ev.clientX+14)+'px';tip.style.top=(ev.clientY-10)+'px';}}});
+    sv.appendChild(g);
+  });
+
+  // Pin nodes clickable
+  sv.querySelectorAll('.pn').forEach(pn=>{
+    pn.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      const net=pn.getAttribute('data-net');
+      const w=wires.find(w=>w.net===net);
+      wActivate(net,null);
+      if(w)showWTip(w,ev.clientX,ev.clientY);
+    });
+  });
+
+  sv.addEventListener('click',()=>wDeactivate());
+}
+
+function buildWiringSidebar(){
+  const sb=document.getElementById('wire-sidebar');
+  sb.innerHTML='<div class="ws-title">CLICK TO HIGHLIGHT</div>';
+  const groups=[
+    {label:'Power',nets:['5v','gnd','psu2']},
+    {label:'OLED I2C',nets:['sda','scl']},
+    {label:'Encoder',nets:['s1','s2','key']},
+    {label:'Buttons',nets:['btn1','btn2']},
+    {label:'Servo & Motor',nets:['servo','in1','in2','pp','pn']},
+    {label:'NeoPixel',nets:['neo']},
+    {label:'Limit Switches',nets:['sw1','sw2','sw3','sw4','sw5']},
+  ];
+  groups.forEach(g=>{
+    const sep=document.createElement('div');sep.className='sgap';sb.appendChild(sep);
+    g.nets.forEach(net=>{
+      const conn=WCONN.find(c=>c.net===net);if(!conn)return;
+      const row=document.createElement('div');
+      row.className='cr';row.setAttribute('data-net',net);
+      row.innerHTML=`<div class="cd" style="background:${conn.col}"></div><span class="cf">${conn.label}</span><span class="ct">${conn.to}</span>`;
+      row.addEventListener('click',ev=>{ev.stopPropagation();wActivate(net,null);const w=WCONN.find(c=>c.net===net);if(w){const rect=row.getBoundingClientRect();showWTip(w,rect.left-230,rect.top);}});
+      sb.appendChild(row);
+    });
+  });
+  const notes=[
+    {type:'warn',title:'⚠ Two power supplies',body:'PSU1 (5V) for logic, servo, NeoPixels, OLED. PSU2 (5–12V) for L298N + pump only. All GNDs share the common ground rail.'},
+    {type:'info',title:'💡 I2C pins',body:'OLED uses A4 (SDA) and A5 (SCL) — Nano fixed I2C pins. Do not use for anything else.'},
+    {type:'info',title:'💡 Encoder',body:'Interrupt-driven on D2 (CLK) and D3 (DT). KEY button on D8. No resistors needed — INPUT_PULLUP used.'},
+    {type:'info',title:'💡 Mini L298N',body:'No ENA jumper. VIN, GND, IN1, IN2, OUT+, OUT- only. OUT+ → pump +, OUT- → pump -.'},
+  ];
+  notes.forEach(n=>{const d=document.createElement('div');d.className=`wnote ${n.type}`;d.innerHTML=`<b>${n.title}</b>${n.body}`;sb.appendChild(d);});
+}
+
+function wActivate(net){
+  wActiveNet=net;
+  document.querySelectorAll('.wire-el').forEach(w=>{
+    const wn=w.getAttribute('data-net');
+    w.classList.toggle('active',wn===net);
+    w.classList.toggle('faded',wn!==net);
+  });
+  document.querySelectorAll('.pn').forEach(p=>{p.classList.toggle('active',p.getAttribute('data-net')===net);});
+  document.querySelectorAll('.cr').forEach(r=>{r.classList.toggle('active',r.getAttribute('data-net')===net);});
+}
+
+function wDeactivate(){
+  wActiveNet=null;
+  document.querySelectorAll('.wire-el').forEach(w=>{w.classList.remove('active','faded');});
+  document.querySelectorAll('.pn').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.cr').forEach(r=>r.classList.remove('active'));
+  const tip=document.getElementById('wtip');if(tip)tip.style.display='none';
+}
+
+function showWTip(conn,x,y){
+  const tip=document.getElementById('wtip');if(!tip)return;
+  document.getElementById('wt-from').textContent=conn.from||'';
+  document.getElementById('wt-label').textContent=conn.label||conn.net;
+  document.getElementById('wt-to').textContent=conn.to||'';
+  tip.style.left=(x+14)+'px';tip.style.top=(y-10)+'px';tip.style.display='block';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  FINAL CODE CONTENT
+// ═══════════════════════════════════════════════════════════════════
+const FINAL_CODE = `// =====================================================================
+//  Automated Water Dispenser — MERGED FINAL
+//  Board  : Arduino Nano
+//  Display: SSD1306 OLED 0.96" 128x64 via I2C (SDA=A4, SCL=A5)
+//
+//  Best of both versions:
+//    [+] Interrupt-driven encoder (faster, no missed ticks)
+//    [+] NeoPixel feedback per slot (green/blue/red/orange)
+//    [+] Glass-removed safety abort mid-serve
+//    [+] Drink counter + total mL stats screen
+//    [+] Idle timeout auto power-off (5 min)
+//    [+] Rich OLED UI with dedicated screens
+//    [+] OLED refresh throttled (no flicker)
+//    [+] Encoder KEY button toggles stats screen
+//    [+] volatile keyword on ISR shared variables (bug fix)
+//
+//  Controls:
+//    Button 1  short press  — system on/off
+//    Button 2  short press  — manual serve (Mode A)
+//    Button 2  long press   — toggle Mode A (manual) / Mode B (auto)
+//    Encoder   turn         — adjust target volume (10–99 mL)
+//    Encoder   key press    — toggle stats screen
+//
+//  Wiring:
+//    OLED  SDA -> A4  |  SCL -> A5   (I2C — do NOT reassign)
+//    BTN1        -> D4
+//    BTN2        -> D5
+//    ENC_A (CLK) -> D2  <- interrupt pin
+//    ENC_B (DT)  -> D3  <- interrupt pin
+//    ENC_KEY     -> D8
+//    SERVO       -> D9
+//    L298N IN1   -> D10
+//    L298N IN2   -> D11
+//    NEOPIXEL    -> D12
+//    LIMIT SW 1-5 -> A0-A4  (other leg -> GND)
+//
+//  Libraries (install via Library Manager):
+//    - Adafruit SSD1306
+//    - Adafruit GFX
+//    - Adafruit NeoPixel
+//    - Servo (built-in)
+// =====================================================================
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Servo.h>
+#include <Adafruit_NeoPixel.h>
+
+// -- OLED -------------------------------------------------------------
+#define SCREEN_W     128
+#define SCREEN_H      64
+#define OLED_RESET    -1
+#define OLED_ADDR    0x3C   // try 0x3D if screen stays blank
+Adafruit_SSD1306 oled(SCREEN_W, SCREEN_H, &Wire, OLED_RESET);
+
+// -- PIN DEFINITIONS --------------------------------------------------
+#define BUTTON1_PIN   4
+#define BUTTON2_PIN   5
+#define ENC_A         2     // interrupt pin — CLK on KY-040
+#define ENC_B         3     // interrupt pin — DT  on KY-040
+#define ENC_KEY       8     // SW on KY-040
+#define SERVO_PIN     9
+#define MOTOR_IN1    10
+#define MOTOR_IN2    11
+#define LED_PIN      12
+
+// -- CONSTANTS --------------------------------------------------------
+#define NUM_LEDS            5
+#define NUM_SWITCHES        5
+
+#define VOLUME_MIN         10     // mL
+#define VOLUME_MAX         99     // mL
+
+// Calibrate: measure how many mL your pump delivers in 1 second
+#define ML_PER_SECOND       8.0f
+
+#define SERVO_DELAY_MS    600
+#define BTN_DEBOUNCE_MS    50
+#define LONG_PRESS_MS    1000
+#define OLED_REFRESH_MS   100
+
+// Set to 0 to disable idle timeout
+#define IDLE_TIMEOUT_MS  300000UL  // 5 minutes
+
+// -- NEOPIXEL COLOURS -------------------------------------------------
+#define COLOR_OFF      strip.Color(0,   0,   0)
+#define COLOR_READY    strip.Color(0,   220, 0)    // green  — glass present
+#define COLOR_SERVING  strip.Color(0,   80,  255)  // blue   — dispensing
+#define COLOR_FULL     strip.Color(220, 0,   0)    // red    — done
+#define COLOR_WARNING  strip.Color(255, 80,  0)    // orange — glass removed
+
+// -- OBJECTS ----------------------------------------------------------
+Servo             servo;
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// -- HARDWARE TABLES --------------------------------------------------
+const int limitSwitches[NUM_SWITCHES] = { A0, A1, A2, A3, A4 };
+const int angles[NUM_SWITCHES]        = { 30, 60, 93, 130, 180 };
+
+// -- ENCODER STATE (volatile — shared with ISR) -----------------------
+volatile int  encDelta    = 0;
+volatile bool encALast    = HIGH;
+
+// -- SYSTEM STATE -----------------------------------------------------
+int  selectedVolume = 10;
+bool systemOn       = false;
+bool modeA          = true;
+bool pendingServe   = false;
+
+bool glassFull[NUM_SWITCHES]    = {};
+bool glassPresent[NUM_SWITCHES] = {};
+
+// -- DRINK STATS ------------------------------------------------------
+int           drinkCount    = 0;
+unsigned long totalMlServed = 0;
+bool          showingStats  = false;
+
+// -- IDLE TIMEOUT -----------------------------------------------------
+unsigned long lastActivityTime = 0;
+
+// -- BUTTON 1 ---------------------------------------------------------
+bool          btn1Last = HIGH;
+unsigned long btn1Time = 0;
+
+// -- BUTTON 2 ---------------------------------------------------------
+bool          btn2Last         = HIGH;
+unsigned long btn2PressStart   = 0;
+bool          longPressHandled = false;
+
+// -- ENCODER KEY ------------------------------------------------------
+bool encKeyLast = HIGH;
+
+// -- OLED REFRESH THROTTLE --------------------------------------------
+unsigned long lastOledUpdate = 0;
+
+
+// =====================================================================
+//  ENCODER ISR
+// =====================================================================
+void encoderISR() {
+  bool a = digitalRead(ENC_A);
+  bool b = digitalRead(ENC_B);
+  if (a != encALast) {
+    encDelta += (b != a) ? +1 : -1;
+    encALast = a;
+  }
+}
+
+
+// =====================================================================
+//  SETUP
+// =====================================================================
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(BUTTON1_PIN, INPUT_PULLUP);
+  pinMode(BUTTON2_PIN, INPUT_PULLUP);
+  pinMode(ENC_A,       INPUT_PULLUP);
+  pinMode(ENC_B,       INPUT_PULLUP);
+  pinMode(ENC_KEY,     INPUT_PULLUP);
+  pinMode(MOTOR_IN1,   OUTPUT);
+  pinMode(MOTOR_IN2,   OUTPUT);
+  stopPump();
+
+  servo.attach(SERVO_PIN);
+  servo.write(0);
+
+  for (int i = 0; i < NUM_SWITCHES; i++) {
+    pinMode(limitSwitches[i], INPUT_PULLUP);
+  }
+
+  strip.begin();
+  strip.clear();
+  strip.show();
+
+  attachInterrupt(digitalPinToInterrupt(ENC_A), encoderISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_B), encoderISR, CHANGE);
+
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+    Serial.println(F("OLED not found! Check wiring or try 0x3D"));
+    while (true);
+  }
+
+  bootAnimation();
+  lastActivityTime = millis();
+}
+
+
+// =====================================================================
+//  MAIN LOOP
+// =====================================================================
+void loop() {
+  handleSystemToggle();
+  if (!systemOn) return;
+
+  handleEncoder();
+  handleEncoderKey();
+  handleButton2();
+  checkGlasses();
+  checkIdleTimeout();
+
+  if (!modeA && pendingServe) {
+    pendingServe = false;
+    serveWater();
+  }
+
+  if (millis() - lastOledUpdate >= OLED_REFRESH_MS) {
+    lastOledUpdate = millis();
+    showingStats ? oledShowStats() : oledShowMain();
+  }
+}
+
+
+// =====================================================================
+//  BOOT ANIMATION
+// =====================================================================
+void bootAnimation() {
+  // NeoPixel cyan-blue sweep
+  for (int i = 0; i < NUM_LEDS; i++) {
+    strip.setPixelColor(i, strip.Color(0, 80, 200));
+    strip.show();
+    delay(80);
+  }
+  strip.clear();
+  strip.show();
+
+  // OLED splash screen
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.drawRect(0, 0, 128, 64, SSD1306_WHITE);
+  oled.setTextSize(1);
+  oled.setCursor(18, 10);
+  oled.print(F("WATER DISPENSER"));
+  oled.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+  oled.setCursor(28, 30);
+  oled.print(F("Arduino Nano"));
+  oled.setCursor(22, 44);
+  oled.print(F("Press BTN1 to ON"));
+  oled.display();
+  delay(1500);
+  oled.clearDisplay();
+  oled.display();
+}
+
+
+// =====================================================================
+//  ACTIVITY TRACKER
+// =====================================================================
+void recordActivity() {
+  lastActivityTime = millis();
+}
+
+
+// =====================================================================
+//  IDLE TIMEOUT
+// =====================================================================
+void checkIdleTimeout() {
+#if IDLE_TIMEOUT_MS > 0
+  if (millis() - lastActivityTime >= IDLE_TIMEOUT_MS) {
+    Serial.println(F("Idle timeout — shutting down."));
+    systemOn = false;
+    stopPump();
+    servo.write(0);
+    strip.clear(); strip.show();
+    for (int i = 0; i < NUM_SWITCHES; i++) {
+      glassFull[i] = glassPresent[i] = false;
+    }
+    showingStats = false;
+    oled.clearDisplay();
+    oled.setTextColor(SSD1306_WHITE);
+    oled.setTextSize(1);
+    oled.setCursor(22, 22);
+    oled.print(F("System idle OFF"));
+    oled.setCursor(16, 38);
+    oled.print(F("Press BTN1 to ON"));
+    oled.display();
+  }
+#endif
+}
+
+
+// =====================================================================
+//  SYSTEM TOGGLE — Button 1 short press
+// =====================================================================
+void handleSystemToggle() {
+  bool current = digitalRead(BUTTON1_PIN);
+  if (current != btn1Last) btn1Time = millis();
+
+  if (millis() - btn1Time > BTN_DEBOUNCE_MS) {
+    static bool confirmed = HIGH;
+    if (current != confirmed) {
+      confirmed = current;
+      if (confirmed == LOW) {
+        systemOn = !systemOn;
+        recordActivity();
+        if (!systemOn) {
+          stopPump(); servo.write(0);
+          strip.clear(); strip.show();
+          for (int i = 0; i < NUM_SWITCHES; i++) {
+            glassFull[i] = glassPresent[i] = false;
+          }
+          showingStats = false;
+          oledShowOff();
+          Serial.println(F("System OFF"));
+        } else {
+          Serial.println(F("System ON"));
+        }
+      }
+    }
+  }
+  btn1Last = current;
+}
+
+
+// =====================================================================
+//  ENCODER — consume ISR delta, update volume
+// =====================================================================
+void handleEncoder() {
+  noInterrupts();
+  int delta = encDelta;
+  encDelta  = 0;
+  interrupts();
+
+  if (delta != 0) {
+    selectedVolume = constrain(
+      selectedVolume + (delta > 0 ? 1 : -1),
+      VOLUME_MIN, VOLUME_MAX
+    );
+    showingStats = false;
+    recordActivity();
+  }
+}
+
+
+// =====================================================================
+//  ENCODER KEY — toggle stats / main screen
+// =====================================================================
+void handleEncoderKey() {
+  bool current = digitalRead(ENC_KEY);
+  if (encKeyLast == LOW && current == HIGH) {
+    showingStats = !showingStats;
+    recordActivity();
+  }
+  encKeyLast = current;
+}
+
+
+// =====================================================================
+//  BUTTON 2 — short press: serve | long press: toggle mode
+// =====================================================================
+void handleButton2() {
+  bool current = digitalRead(BUTTON2_PIN);
+
+  if (btn2Last == HIGH && current == LOW) {
+    btn2PressStart   = millis();
+    longPressHandled = false;
+    recordActivity();
+  }
+
+  if (current == LOW && !longPressHandled) {
+    if (millis() - btn2PressStart >= LONG_PRESS_MS) {
+      modeA            = !modeA;
+      longPressHandled = true;
+      showingStats     = false;
+      oledFlashMode();
+    }
+  }
+
+  if (btn2Last == LOW && current == HIGH) {
+    if (!longPressHandled && modeA) serveWater();
+  }
+
+  btn2Last = current;
+}
+
+
+// =====================================================================
+//  CHECK GLASSES — poll limit switches, update NeoPixels
+// =====================================================================
+void checkGlasses() {
+  for (int i = 0; i < NUM_SWITCHES; i++) {
+    bool detected = (digitalRead(limitSwitches[i]) == LOW);
+
+    if (!detected) {
+      if (glassPresent[i]) {
+        glassPresent[i] = false;
+        glassFull[i]    = false;
+        strip.setPixelColor(i, COLOR_OFF);
+      }
+    } else {
+      if (!glassPresent[i]) {
+        glassPresent[i] = true;
+        recordActivity();
+        if (!glassFull[i]) {
+          strip.setPixelColor(i, COLOR_READY);
+          if (!modeA) pendingServe = true;
+        }
+      }
+    }
+  }
+  strip.show();
+}
+
+
+// =====================================================================
+//  SERVE WATER
+// =====================================================================
+void serveWater() {
+  for (int i = 0; i < NUM_SWITCHES; i++) {
+    if (glassPresent[i] && !glassFull[i]) {
+      rotateAndServe(i);
+      glassFull[i] = true;
+    }
+  }
+}
+
+
+// =====================================================================
+//  ROTATE AND DISPENSE
+// =====================================================================
+void rotateAndServe(int index) {
+  servo.write(angles[index]);
+  delay(SERVO_DELAY_MS);
+
+  strip.setPixelColor(index, COLOR_SERVING);
+  strip.show();
+
+  startPump();
+
+  unsigned long duration  = (unsigned long)((selectedVolume / ML_PER_SECOND) * 1000.0f);
+  unsigned long startTime = millis();
+  bool aborted = false;
+
+  while (millis() - startTime < duration) {
+    if (digitalRead(limitSwitches[index]) == HIGH) {
+      aborted = true;
+      break;
+    }
+    unsigned long elapsed = millis() - startTime;
+    int dispensed = constrain(
+      (int)((elapsed / 1000.0f) * ML_PER_SECOND), 0, selectedVolume
+    );
+    oledShowServing(index, dispensed, selectedVolume);
+    delay(50);
+  }
+
+  stopPump();
+
+  if (!aborted) {
+    drinkCount++;
+    totalMlServed += selectedVolume;
+    oledShowServing(index, selectedVolume, selectedVolume);
+    delay(400);
+  }
+
+  servo.write(0);
+  delay(SERVO_DELAY_MS);
+
+  strip.setPixelColor(index, aborted ? COLOR_WARNING : COLOR_FULL);
+  strip.show();
+
+  if (aborted) {
+    glassFull[index] = false;
+    oledShowWarning(index);
+  }
+
+  recordActivity();
+}
+
+
+// =====================================================================
+//  OLED SCREENS
+// =====================================================================
+void oledShowMain() {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+
+  oled.fillRoundRect(0, 0, 42, 14, 3, SSD1306_WHITE);
+  oled.setTextColor(SSD1306_BLACK);
+  oled.setTextSize(1);
+  oled.setCursor(3, 3);
+  oled.print(modeA ? F("MANUAL") : F(" AUTO "));
+  oled.setTextColor(SSD1306_WHITE);
+
+  for (int i = 0; i < NUM_SWITCHES; i++) {
+    int x = 58 + i * 14;
+    if (glassPresent[i]) {
+      glassFull[i]
+        ? oled.fillCircle(x, 7, 4, SSD1306_WHITE)
+        : oled.drawCircle(x, 7, 4, SSD1306_WHITE);
+    } else {
+      oled.drawCircle(x, 7, 4, SSD1306_WHITE);
+      oled.drawPixel(x, 7, SSD1306_BLACK);
+    }
+  }
+
+  oled.drawLine(0, 16, 127, 16, SSD1306_WHITE);
+  oled.setTextSize(4);
+  oled.setCursor(selectedVolume >= 100 ? 14 : 26, 22);
+  oled.print(selectedVolume);
+  oled.setTextSize(1);
+  oled.setCursor(96, 30);
+  oled.print(F("mL"));
+
+  oled.drawLine(0, 54, 127, 54, SSD1306_WHITE);
+  oled.setCursor(2, 57);
+  oled.print(F("ENC:vol  KEY:stats"));
+  oled.display();
+}
+
+void oledShowStats() {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.fillRect(0, 0, 128, 14, SSD1306_WHITE);
+  oled.setTextColor(SSD1306_BLACK);
+  oled.setTextSize(1);
+  oled.setCursor(28, 3);
+  oled.print(F("SESSION STATS"));
+  oled.setTextColor(SSD1306_WHITE);
+
+  oled.setCursor(2, 20);
+  oled.print(F("Drinks:"));
+  oled.setTextSize(2);
+  oled.setCursor(2, 30);
+  oled.print(drinkCount);
+
+  oled.setTextSize(1);
+  oled.setCursor(68, 20);
+  oled.print(F("Total mL:"));
+  oled.setTextSize(2);
+  oled.setCursor(68, 30);
+  if (totalMlServed >= 1000) {
+    oled.print(totalMlServed / 1000.0f, 1);
+    oled.setTextSize(1);
+    oled.print(F("L"));
+  } else {
+    oled.print(totalMlServed);
+  }
+
+  oled.drawLine(0, 54, 127, 54, SSD1306_WHITE);
+  oled.setTextSize(1);
+  oled.setCursor(22, 57);
+  oled.print(F("KEY: back to main"));
+  oled.display();
+}
+
+void oledShowServing(int slot, int dispensed, int target) {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextSize(1);
+  oled.setCursor(18, 2);
+  oled.print(F("SERVING SLOT "));
+  oled.print(slot + 1);
+  oled.drawLine(0, 12, 127, 12, SSD1306_WHITE);
+
+  oled.setTextSize(4);
+  oled.setCursor(dispensed >= 100 ? 10 : 22, 18);
+  oled.print(dispensed);
+  oled.setTextSize(1);
+  oled.setCursor(96, 24); oled.print(F("/"));
+  oled.setCursor(96, 34); oled.print(target);
+  oled.setCursor(96, 44); oled.print(F("mL"));
+
+  oled.drawRect(0, 54, 128, 10, SSD1306_WHITE);
+  int barW = map(dispensed, 0, target, 0, 124);
+  oled.fillRect(2, 56, max(barW, 0), 6, SSD1306_WHITE);
+  oled.display();
+}
+
+void oledShowOff() {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.drawRect(0, 0, 128, 64, SSD1306_WHITE);
+  oled.setTextSize(2);
+  oled.setCursor(30, 16); oled.print(F("SYSTEM"));
+  oled.setCursor(46, 36); oled.print(F("OFF"));
+  oled.display();
+}
+
+void oledFlashMode() {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextSize(2);
+  oled.setCursor(10, 14); oled.print(F("MODE:"));
+  oled.setCursor(10, 36); oled.print(modeA ? F("MANUAL") : F("AUTO  "));
+  oled.display();
+  delay(600);
+}
+
+void oledShowWarning(int slot) {
+  oled.clearDisplay();
+  oled.setTextColor(SSD1306_WHITE);
+  oled.setTextSize(1);
+  oled.setCursor(28, 8);  oled.print(F("!! WARNING !!"));
+  oled.drawLine(0, 18, 127, 18, SSD1306_WHITE);
+  oled.setCursor(10, 26); oled.print(F("Glass removed!"));
+  oled.setCursor(10, 38); oled.print(F("Slot: ")); oled.print(slot + 1);
+  oled.setCursor(10, 50); oled.print(F("Serve aborted."));
+  oled.display();
+  delay(1500);
+}
+
+
+// =====================================================================
+//  PUMP HELPERS
+// =====================================================================
+void startPump() {
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, HIGH);
+}
+
+void stopPump() {
+  digitalWrite(MOTOR_IN1, LOW);
+  digitalWrite(MOTOR_IN2, LOW);
+}`;
+
+function loadCodePage(){
+  const pre=document.getElementById('code-block');
+  if(!pre||pre.dataset.loaded) return;
+  pre.dataset.loaded='1';
+  pre.innerHTML=syntaxHL(FINAL_CODE);
+}
+
+function syntaxHL(code){
+  const esc=code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return esc
+    .replace(/(\/\/[^\n]*)/g,'<span style="color:#4a5568">$1</span>')
+    .replace(/\b(#define|#include|#if|#endif)\b/g,'<span style="color:#c084fc">$1</span>')
+    .replace(/\b(void|bool|int|unsigned|long|float|const|true|false|return|if|else|for|while|break|static|volatile|noInterrupts|interrupts)\b/g,'<span style="color:#38bdf8">$1</span>')
+    .replace(/\b(setup|loop|bootAnimation|recordActivity|checkIdleTimeout|handleSystemToggle|handleEncoder|handleEncoderKey|handleButton2|checkGlasses|serveWater|rotateAndServe|oledShowMain|oledShowStats|oledShowServing|oledShowOff|oledFlashMode|oledShowWarning|startPump|stopPump|encoderISR)\b/g,'<span style="color:#facc15">$1</span>')
+    .replace(/\b(F|Serial|strip|oled|servo|digitalWrite|digitalRead|pinMode|analogRead|millis|delay|constrain|map|attachInterrupt|digitalPinToInterrupt|max)\b/g,'<span style="color:#4ade80">$1</span>')
+    .replace(/"([^"]*?)"/g,'"<span style="color:#fb923c">$1</span>"')
+    .replace(/\b(\d+(?:\.\d+)?f?)\b/g,'<span style="color:#f472b6">$1</span>');
+}
+
+function copyCode(){
+  navigator.clipboard.writeText(FINAL_CODE).then(()=>{
+    const b=document.getElementById('copy-btn');
+    b.textContent='Copied!';b.style.background='#052e16';b.style.borderColor='#4ade80';
+    setTimeout(()=>{b.textContent='Copy code';b.style.background='#0a1f0a';b.style.borderColor='#16a34a';},2000);
+  });
+}
+
+function downloadCode(){
+  const blob=new Blob([FINAL_CODE],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='water_dispenser_merged.ino';
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════
+// Code page lazy load — hooked into the existing showPage function below
+
+buildMachine();
+log('Dispenser ready — press Power ON');
 </script>
 </body>
 </html>
